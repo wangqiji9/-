@@ -1980,16 +1980,18 @@ async function exportAllForSync() {
   const { keys, vals } = await idbGetAll(STORE_DATA);
   const data = {};
   for (let i = 0; i < keys.length; i++) data[keys[i]] = vals[i];
-  return { version: 1, lastModified: new Date().toISOString(), profiles, data };
+  const profs = await readProfiles();
+  return { version: 1, lastModified: new Date().toISOString(), profiles: profs, data };
 }
 
 async function importAllFromSync(payload) {
   if (!payload || payload.version !== 1) return;
   for (const [k, v] of Object.entries(payload.data || {})) await idbPut(STORE_DATA, k, v);
-  if (Array.isArray(payload.profiles)) profiles = payload.profiles;
+  if (Array.isArray(payload.profiles)) await writeProfiles(payload.profiles);
   const savedPid = await idbGet(STORE_DATA, 'activeProfileId');
-  activeProfileId = (savedPid && profiles.find(p => p.id === savedPid)) ? savedPid : profiles[0]?.id;
-  activeProfileName = profiles.find(p => p.id === activeProfileId)?.name || '日志';
+  const profs = await readProfiles();
+  activeProfileId = (savedPid && profs.find(p => p.id === savedPid)) ? savedPid : profs[0]?.id;
+  activeProfileName = profs.find(p => p.id === activeProfileId)?.name || '日志';
   symbolMap = await readSymbolMap();
   await restoreBalance();
   tradesCache = await readAllTrades();
