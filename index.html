@@ -2051,7 +2051,7 @@ async function createNewBin() {
   try {
     const res = await fetch(JSONBIN_BASE, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': key, 'X-Bin-Name': '仓位日志', 'X-Bin-Private': 'true' },
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': key, 'X-Bin-Name': 'trade-journal', 'X-Bin-Private': 'true' },
       body: JSON.stringify(await exportAllForSync()),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
