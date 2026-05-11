@@ -1313,7 +1313,10 @@ async function clearAllData() {
   await writeProfileMeta(activeProfileId, { nextId: 1, balance: null });
   tradesCache = [];
   document.getElementById('balance').value = ''; updateBalanceDisplay(NaN);
-  refreshAccountPanel(); await renderTrades(); updateStorageIndicator(); markDirty();// ── Margin accounting ──────────────────────────────────────────────────────
+  refreshAccountPanel(); await renderTrades(); updateStorageIndicator(); markDirty();
+}
+
+// ── Margin accounting ──────────────────────────────────────────────────────
 function getUsedMargin() {
   return tradesCache.filter(t => !isFullyClosed(t)).reduce((sum, t) => {
     const rem = Math.max(0, t.marginQty - (t.closedMarginQty || 0));
