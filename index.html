@@ -102,7 +102,8 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
 .fetch-msg.ok  { color: var(--green); }
 .fetch-msg.err { color: var(--red); }
 
-.result-panel { flex: 1; display: flex; flex-direction: column; justify-content: space-between; }
+.result-panel { flex: 1; display: flex; flex-direction: column; }
+.action-btns { margin-top: auto; }
 .result-rows { flex: 1; }
 .result-row { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; font-size: 13px; border-bottom: 1px solid var(--border); }
 .result-row:last-child { border-bottom: none; }
@@ -322,6 +323,24 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
 
 .hidden-input { display: none; }
 
+/* ── Symbol Autocomplete ── */
+.sym-wrap { position: relative; }
+.sym-dropdown {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+  background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 250; max-height: 220px; overflow-y: auto;
+}
+.sym-dropdown.open { display: block; }
+.sym-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 12px; cursor: pointer; transition: background 0.12s; font-size: 14px;
+}
+.sym-item:hover { background: rgba(255,255,255,0.06); }
+.sym-item-name { color: var(--text-primary); font-weight: 500; }
+.sym-del { background: none; border: none; color: var(--text-tertiary); font-size: 16px; cursor: pointer; padding: 0 4px; line-height: 1; }
+.sym-del:hover { color: var(--red); }
+.sym-empty { padding: 12px; font-size: 13px; color: var(--text-tertiary); text-align: center; }
+
 /* ── Cloud Sync ── */
 .sync-btn { background:none; border:1px solid var(--border); border-radius:20px; padding:5px 12px; color:var(--text-tertiary); font-size:13px; cursor:pointer; display:flex; align-items:center; gap:5px; transition:all 0.2s; font-family:inherit; white-space:nowrap; }
 .sync-btn:hover { border-color:var(--accent); color:var(--accent); }
@@ -393,8 +412,13 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
       </div>
       <div class="field">
         <label>交易品种</label>
-        <input type="text" id="symbol" list="symbol-list" placeholder="例: BTC, ETH, EURUSD" autocomplete="off">
-        <datalist id="symbol-list"></datalist>
+        <div class="sym-wrap">
+          <input type="text" id="symbol" placeholder="例: BTC, ETH, EURUSD" autocomplete="off"
+            oninput="filterSymbolDropdown(this.value)"
+            onfocus="openSymbolDropdown()"
+            onkeydown="if(event.key==='Escape')closeSymbolDropdown()">
+          <div class="sym-dropdown" id="sym-dropdown"></div>
+        </div>
       </div>
       <div class="field">
         <div class="label-row">
@@ -1625,14 +1649,79 @@ async function saveSymbolMapping() {
   catch(e) { alert('查询失败：'+(e.message||'未知错误')); }
 }
 
-// ── Symbol List ────────────────────────────────────────────────────────────
-async function populateSymbolList() {
-  const dl = document.getElementById('symbol-list');
-  const symbols = await getAllSymbols();
-  const s = new Set(symbols);
-  Object.keys(symbolMap).forEach(k => s.add(k));
-  dl.innerHTML = [...s].sort().map(v => `<option value="${v}">`).join('');
+// ── Symbol Autocomplete ───────────────────────────────────────────────────
+let allSymbols = [];
+
+async function refreshSymbolList() {
+  const traded = await getAllSymbols();
+  const mapped = Object.keys(symbolMap);
+  const combined = [...new Set([...traded, ...mapped])].sort();
+  allSymbols = combined;
 }
+
+async function populateSymbolList() {
+  await refreshSymbolList();
+}
+
+function renderSymbolDropdown(filter) {
+  const dd = document.getElementById('sym-dropdown');
+  if (!dd) return;
+  const q = (filter || '').trim().toUpperCase();
+  const items = q ? allSymbols.filter(s => s.toUpperCase().includes(q)) : allSymbols;
+  if (!items.length) {
+    dd.innerHTML = `<div class="sym-empty">无历史品种${q ? ' · 直接输入' : ''}</div>`;
+    return;
+  }
+  dd.innerHTML = items.map(sym => `
+    <div class="sym-item" onclick="selectSymbol('${sym}')">
+      <span class="sym-item-name">${sym}</span>
+      <button class="sym-del" title="从列表删除" onclick="event.stopPropagation();deleteSymbolEntry('${sym}')">×</button>
+    </div>`).join('');
+}
+
+function openSymbolDropdown() {
+  renderSymbolDropdown(document.getElementById('symbol').value);
+  document.getElementById('sym-dropdown').classList.add('open');
+}
+
+function closeSymbolDropdown() {
+  document.getElementById('sym-dropdown').classList.remove('open');
+}
+
+function filterSymbolDropdown(val) {
+  renderSymbolDropdown(val);
+  if (!document.getElementById('sym-dropdown').classList.contains('open'))
+    openSymbolDropdown();
+}
+
+function selectSymbol(sym) {
+  document.getElementById('symbol').value = sym;
+  closeSymbolDropdown();
+}
+
+async function deleteSymbolEntry(sym) {
+  const hasTrades = (await readSymbolTrades(sym)).length > 0;
+  const msg = hasTrades
+    ? `从列表移除「${sym}」？\n\n该品种有交易记录，是否同时删除所有交易记录？\n\n确认 = 删除记录 + 移除\n取消 = 仅移除下拉列表，保留记录`
+    : `从列表移除「${sym}」？`;
+  if (!confirm(msg)) return;
+  if (hasTrades) {
+    await writeSymbolTrades(sym, []);
+    tradesCache = await readAllTrades();
+    refreshAccountPanel(); renderStatsPanel(tradesCache);
+    updateStorageIndicator(); markDirty();
+  }
+  delete symbolMap[sym];
+  await writeSymbolMap(symbolMap);
+  await refreshSymbolList();
+  renderSymbolDropdown(document.getElementById('symbol').value);
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', e => {
+  const wrap = document.querySelector('.sym-wrap');
+  if (wrap && !wrap.contains(e.target)) closeSymbolDropdown();
+});
 
 // ── Storage Indicator ──────────────────────────────────────────────────────
 async function updateStorageIndicator() {
@@ -1943,8 +2032,9 @@ document.getElementById('symbol').addEventListener('change', () => {
 });
 // Close profile dropdown on outside click
 document.addEventListener('click', e => {
-  if (!document.getElementById('profile-trigger-btn').contains(e.target) &&
-      !document.getElementById('profile-dropdown').contains(e.target)) {
+  const trigger = document.getElementById('profile-trigger');
+  const dropdown = document.getElementById('profile-dropdown');
+  if (trigger && !trigger.contains(e.target) && dropdown && !dropdown.contains(e.target)) {
     if (profileDropdownOpen) closeProfileDropdown();
   }
 });
