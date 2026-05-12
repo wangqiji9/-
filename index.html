@@ -771,14 +771,22 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
 <div class="overlay" id="sync-overlay">
   <div class="modal" style="width:480px">
     <h2>☁ 云同步设置</h2>
-    <p class="modal-sub">使用 npoint.io 免费服务在多设备间同步数据（无需注册、无大小限制）</p>
+    <p class="modal-sub">使用你的 GitHub 账号同步数据（私密 Gist，支持跨域）</p>
 
     <div class="sync-section">
-      <h3>数据 ID</h3>
-      <div class="field" style="margin-bottom:6px">
-        <input type="text" id="sync-bin-id" placeholder="粘贴 npoint.io 文档 ID">
+      <h3>配置</h3>
+      <div class="field">
+        <label>GitHub Token</label>
+        <input type="password" id="sync-token" placeholder="ghp_xxxxxxxxxxxx" autocomplete="off">
       </div>
-      <div class="sync-hint">① 打开 <a href="https://www.npoint.io/" target="_blank" style="color:var(--accent)">npoint.io</a> → ② 点 Create JSON Bin → ③ 内容留空直接 Save → ④ 从 URL 复制 ID（如 <code style="color:var(--teal)">abc123def</code>）→ ⑤ 粘贴到上方</div>
+      <div class="field" style="margin-bottom:6px">
+        <label>Gist ID</label>
+        <div class="sync-row">
+          <input type="text" id="sync-bin-id" placeholder="首次点右侧自动创建" style="flex:1">
+          <button class="btn-sm btn-update" onclick="createNewGist()" style="white-space:nowrap;flex-shrink:0">创建 Gist</button>
+        </div>
+      </div>
+      <div class="sync-hint">① GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new token → 勾选 <b>gist</b> → Generate → 复制 token<br>② 粘贴 token → 点「创建 Gist」→ 保存设置</div>
     </div>
 
     <div class="sync-section">
@@ -2033,9 +2041,9 @@ document.addEventListener('click', e => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
-// ── Cloud Sync (npoint.io) ────────────────────────────────────────────────
-const SYNC_API = 'https://api.npoint.io';
-let syncBinId  = localStorage.getItem('syncBinId')  || '';
+// ── Cloud Sync (GitHub Gist) ──────────────────────────────────────────────
+let syncToken = localStorage.getItem('syncToken') || '';
+let syncBinId = localStorage.getItem('syncBinId')  || '';
 let autoSyncEnabled = localStorage.getItem('autoSyncEnabled') === 'true';
 let syncTimer = null;
 let localDirty = false;
@@ -2044,12 +2052,10 @@ function markDirty() {
   localDirty = true;
   localStorage.setItem('lastLocalChange', String(Date.now()));
 }
-
 function setSyncDot(state) {
   const el = document.getElementById('sync-status-dot');
   if (el) { el.className = 'sync-dot'; if (state !== 'off') el.classList.add(state); }
 }
-
 function showSyncToast(msg) {
   const t = document.getElementById('sync-toast');
   if (!t) return;
@@ -2082,16 +2088,21 @@ async function importAllFromSync(payload) {
   if (document.getElementById('journal-panel').classList.contains('open')) await renderTrades();
 }
 
+function gistHeaders() {
+  return { 'Content-Type': 'application/json', 'Authorization': 'token ' + syncToken, 'Accept': 'application/vnd.github.v3+json' };
+}
+
 async function syncToCloud(silent = false) {
-  if (!syncBinId) { if (!silent) alert('请先填写文档 ID'); return false; }
+  if (!syncToken || !syncBinId) { if (!silent) alert('请先配置 Token 和 Gist ID'); return false; }
   setSyncDot('syncing');
   try {
-    const res = await fetch(`${SYNC_API}/${syncBinId}`, {
+    const payload = await exportAllForSync();
+    const res = await fetch('https://api.github.com/gists/' + syncBinId, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(await exportAllForSync()),
+      headers: gistHeaders(),
+      body: JSON.stringify({ files: { 'sync.json': { content: JSON.stringify(payload) } } }),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.message || 'HTTP ' + res.status); }
     localDirty = false;
     localStorage.setItem('lastSyncTime', String(Date.now()));
     setSyncDot('synced');
@@ -2105,12 +2116,15 @@ async function syncToCloud(silent = false) {
 }
 
 async function pullFromCloud(silent = false) {
-  if (!syncBinId) { if (!silent) alert('请先填写文档 ID'); return false; }
+  if (!syncToken || !syncBinId) { if (!silent) alert('请先配置 Token 和 Gist ID'); return false; }
   setSyncDot('syncing');
   try {
-    const res = await fetch(`${SYNC_API}/${syncBinId}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const payload = await res.json();
+    const res = await fetch('https://api.github.com/gists/' + syncBinId, { headers: gistHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const gist = await res.json();
+    const content = gist.files?.['sync.json']?.content;
+    if (!content) throw new Error('Gist 中找不到 sync.json');
+    const payload = JSON.parse(content);
     await importAllFromSync(payload);
     localDirty = false;
     localStorage.setItem('lastSyncTime', String(Date.now()));
@@ -2124,36 +2138,69 @@ async function pullFromCloud(silent = false) {
   }
 }
 
+async function createNewGist() {
+  const tk = document.getElementById('sync-token').value.trim();
+  if (!tk) { alert('请先填写 Token'); return; }
+  setSyncDot('syncing');
+  try {
+    const payload = await exportAllForSync();
+    const res = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'token ' + tk, 'Accept': 'application/vnd.github.v3+json' },
+      body: JSON.stringify({
+        description: 'Trade Journal Sync',
+        public: false,
+        files: { 'sync.json': { content: JSON.stringify(payload) } }
+      }),
+    });
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.message || 'HTTP ' + res.status); }
+    const gist = await res.json();
+    syncBinId = gist.id;
+    document.getElementById('sync-bin-id').value = gist.id;
+    setSyncDot('synced');
+    alert('✓ Gist 创建成功！\nID：' + gist.id + '\n\n请点「保存设置」完成配置。\n在其他设备填入同一 Token 和 ID 即可同步。');
+  } catch(e) {
+    setSyncDot('error');
+    alert('创建失败：' + e.message);
+  }
+}
+
 function startAutoSync() {
   if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
-  if (!autoSyncEnabled || !syncBinId) return;
+  if (!autoSyncEnabled || !syncToken || !syncBinId) return;
   syncTimer = setInterval(async () => { if (localDirty) await syncToCloud(true); }, 2 * 60 * 1000);
 }
 
 function openSyncSettings() {
+  document.getElementById('sync-token').value = syncToken;
   document.getElementById('sync-bin-id').value = syncBinId;
   document.getElementById('sync-auto-toggle').checked = autoSyncEnabled;
   document.getElementById('sync-overlay').classList.add('show');
 }
 
 function saveSyncSettings() {
+  syncToken = document.getElementById('sync-token').value.trim();
   syncBinId = document.getElementById('sync-bin-id').value.trim();
   autoSyncEnabled = document.getElementById('sync-auto-toggle').checked;
+  localStorage.setItem('syncToken', syncToken);
   localStorage.setItem('syncBinId', syncBinId);
   localStorage.setItem('autoSyncEnabled', String(autoSyncEnabled));
   startAutoSync();
-  setSyncDot(syncBinId ? 'synced' : 'off');
+  setSyncDot(syncToken && syncBinId ? 'synced' : 'off');
   closeOverlay('sync-overlay');
   showSyncToast('✓ 同步设置已保存');
 }
 
 async function initCloudSync() {
-  if (!syncBinId) { setSyncDot('off'); return; }
+  if (!syncToken || !syncBinId) { setSyncDot('off'); return; }
   setSyncDot('syncing');
   try {
-    const res = await fetch(`${SYNC_API}/${syncBinId}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const cloud = await res.json();
+    const res = await fetch('https://api.github.com/gists/' + syncBinId, { headers: gistHeaders() });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const gist = await res.json();
+    const content = gist.files?.['sync.json']?.content;
+    if (!content) { setSyncDot('synced'); startAutoSync(); return; }
+    const cloud = JSON.parse(content);
     const cloudTime = new Date(cloud?.lastModified || 0).getTime();
     const localTime = parseInt(localStorage.getItem('lastLocalChange') || '0');
     if (cloudTime > localTime) {
@@ -2169,12 +2216,11 @@ async function initCloudSync() {
   }
 }
 
-// 关闭/隐藏时自动推送
 window.addEventListener('beforeunload', () => {
-  if (localDirty && syncBinId) syncToCloud(true);
+  if (localDirty && syncToken && syncBinId) syncToCloud(true);
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && localDirty && syncBinId) syncToCloud(true);
+  if (document.visibilityState === 'hidden' && localDirty && syncToken && syncBinId) syncToCloud(true);
 });
 
 // ── PWA ────────────────────────────────────────────────────────────────────
