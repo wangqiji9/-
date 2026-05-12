@@ -445,6 +445,10 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
         <label>杠杆倍数</label>
         <input type="number" id="leverage" step="1" value="10">
       </div>
+      <div class="field">
+        <label>手续费率 (%)</label>
+        <input type="number" id="fee-rate" step="0.001" value="0.06" onchange="saveFeeRate()">
+      </div>
       <button class="calc-btn" onclick="calculate()">计算仓位</button>
       <div class="error-msg" id="error"></div>
       <div class="liq-warning" id="liq-warning">
@@ -471,7 +475,7 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
           <div class="result-row"><span class="rl">可买数量</span><span class="rv empty" id="r-qty">——</span></div>
           <div class="result-row"><span class="rl">总仓位价值</span><span class="rv empty" id="r-size">——</span></div>
           <div class="result-row h1"><span class="rl">所需保证金</span><span class="rv empty" id="r-margin">——</span></div>
-          <div class="result-row h2"><span class="rl">保证金对应数量</span><span class="rv empty" id="r-margin-qty">——</span></div>
+          <div class="result-row"><span class="rl">预估开仓手续费</span><span class="rv empty" id="r-fee">——</span></div>
           <div class="result-row" id="r-liq-row" style="display:none">
             <span class="rl">爆仓价 <span style="font-size:10px;color:var(--text-tertiary)">(逐仓·0.5%维持)</span></span>
             <span class="rv" id="r-liq">——</span>
@@ -756,7 +760,6 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
     <select id="filter-status" onchange="renderTrades()">
       <option value="">全部状态</option>
       <option value="open">持仓中</option>
-      <option value="partial">部分平仓</option>
       <option value="profit">已盈利平仓</option>
       <option value="loss">已亏损平仓</option>
       <option value="breakeven">已保本平仓</option>
@@ -834,6 +837,7 @@ let statsExpanded = true;
 let statsSection  = 'overview';
 let activeProfileId   = null;
 let activeProfileName = '';
+let activeFeeRate = 0.0006; // 0.06% default fee rate
 
 // ── Exit Plan Config ───────────────────────────────────────────────────────
 const EXIT_PLAN_CONFIG = {
@@ -1109,17 +1113,19 @@ async function switchProfile(pid) {
   activeProfileName = p?.name || '未知 Profile';
   updateProfileUI();
 
-  // Load balance
+  // Load balance & feeRate
   const m = await readProfileMeta(pid);
   const inp = document.getElementById('balance');
   if (m.balance != null) { inp.value = m.balance; updateBalanceDisplay(m.balance); }
   else { inp.value = ''; updateBalanceDisplay(NaN); }
+  activeFeeRate = m.feeRate ?? 0.0006;
+  document.getElementById('fee-rate').value = +(activeFeeRate * 100).toFixed(4);
 
   // Reset calculator
   lastCalc = null;
   document.getElementById('btn-log').classList.add('btn-disabled');
   hideLiqCheck();
-  ['r-risk','r-pct','r-qty','r-size','r-margin','r-margin-qty'].forEach(id => setRV(id, '——', true));
+  ['r-risk','r-pct','r-qty','r-size','r-margin','r-fee'].forEach(id => setRV(id, '——', true));
 
   // Reload trades
   tradesCache = await readAllProfileTrades(pid);
@@ -1442,7 +1448,8 @@ function computeStats(trades) {
     if (res === 'profit') st.wins++; else if (res === 'loss') st.losses++;
     st.pnl += effectiveAmount(t); st.totalR += effectiveAmount(t) / (t.riskAmount || 1);
   }
-  return { totalTrades, winCount, lossCount, beCount, winRate, totalProfit, totalLoss, netPnL, avgWin, avgLoss, payoffRatio, profitFactor, totalR, avgR, avgWinR, avgLossR, ev, maxConWin, maxConLoss, curStreakType, curStreakCount, maxDD, longCount: longTrades.length, shortCount: shortTrades.length, longWinRate: longTotal > 0 ? longWins / longTotal : 0, shortWinRate: shortTotal > 0 ? shortWins / shortTotal : 0, longPnL, shortPnL, entryTypeStats };
+  const totalFees = closed.reduce((s, t) => s + (t.closes||[]).reduce((s2, c) => s2 + (c.fee||0), 0), 0);
+  return { totalTrades, winCount, lossCount, beCount, totalFees, winRate, totalProfit, totalLoss, netPnL, avgWin, avgLoss, payoffRatio, profitFactor, totalR, avgR, avgWinR, avgLossR, ev, maxConWin, maxConLoss, curStreakType, curStreakCount, maxDD, longCount: longTrades.length, shortCount: shortTrades.length, longWinRate: longTotal > 0 ? longWins / longTotal : 0, shortWinRate: shortTotal > 0 ? shortWins / shortTotal : 0, longPnL, shortPnL, entryTypeStats };
 }
 
 function toggleStats() {
@@ -1488,6 +1495,7 @@ function renderStatsPanel(trades) {
       <div class="stat-cell span2"><div class="sc-label">做空 (${s.shortCount}笔) 胜率 ${(s.shortWinRate*100).toFixed(0)}%</div><div class="sc-val ${s.shortPnL>=0?'profit':'loss'}">${s.shortPnL>=0?'+':''}$${s.shortPnL.toFixed(2)}</div></div>
       <div class="stat-cell span2"><div class="sc-label">连胜纪录</div><div class="sc-val profit">${s.maxConWin} 连胜</div></div>
       <div class="stat-cell span2"><div class="sc-label">连败纪录</div><div class="sc-val loss">${s.maxConLoss} 连败</div></div>
+      <div class="stat-cell span2"><div class="sc-label">累计手续费</div><div class="sc-val loss">-$${s.totalFees.toFixed(2)}</div></div>
       ${entryHtml}
     </div>
     <div style="display:flex; gap:4px; margin-top:16px; margin-bottom:10px; background:var(--bg-input); border-radius:var(--radius-sm); padding:2px;">
@@ -1620,9 +1628,11 @@ function calculate() {
   const qty=riskAmt/stopDist, posSize=qty*entry, margin=posSize/lev, mQty=margin/entry;
   setRV('r-risk','$'+riskAmt.toFixed(2)); setRV('r-pct',stopPct.toFixed(2)+'%');
   setRV('r-qty',qty.toFixed(6)); setRV('r-size','$'+posSize.toFixed(2));
-  setRV('r-margin','$'+margin.toFixed(2)); setRV('r-margin-qty',mQty.toFixed(4));
+  setRV('r-margin','$'+margin.toFixed(2));
+  const openFee=+(posSize*activeFeeRate).toFixed(4);
+  setRV('r-fee','$'+openFee.toFixed(2)+' ('+(activeFeeRate*100).toFixed(2)+'%)');
   localStorage.setItem('traderBalance', bal); updateBalanceDisplay(bal);
-  lastCalc = { entry, stop, bal, rPct, lev, riskAmt, stopPct, qty, posSize, margin, mQty };
+  lastCalc = { entry, stop, bal, rPct, lev, riskAmt, stopPct, qty, posSize, margin, mQty, openFee };
   renderLiqCheck(entry, stop, lev, direction, margin, posSize);
   const { stopValid } = checkLiquidation(entry, stop, lev, direction);
   if (stopValid) document.getElementById('btn-log').classList.remove('btn-disabled');
@@ -1833,7 +1843,7 @@ async function saveEditEntry() {
 function openLogModal() {
   if(!lastCalc)return;
   const sym=document.getElementById('symbol').value.trim().toUpperCase()||'未知品种', c=lastCalc;
-  document.getElementById('log-info').innerHTML=`<div class="info-item"><label>品种</label><span>${sym}</span></div><div class="info-item"><label>方向</label><span>${direction==='long'?'做多 ▲':'做空 ▼'}</span></div><div class="info-item"><label>入场价</label><span>${c.entry}</span></div><div class="info-item"><label>止损价</label><span>${c.stop}</span></div><div class="info-item"><label>可买数量</label><span>${c.qty.toFixed(4)}</span></div><div class="info-item"><label>保证金数量</label><span class="accent">${c.mQty.toFixed(4)}</span></div><div class="info-item"><label>扣除保证金</label><span style="color:var(--red)">-$${c.margin.toFixed(2)}</span></div><div class="info-item"><label>杠杆</label><span>${c.lev}×</span></div>`;
+  document.getElementById('log-info').innerHTML=`<div class="info-item"><label>品种</label><span>${sym}</span></div><div class="info-item"><label>方向</label><span>${direction==='long'?'做多 ▲':'做空 ▼'}</span></div><div class="info-item"><label>入场价</label><span>${c.entry}</span></div><div class="info-item"><label>止损价</label><span>${c.stop}</span></div><div class="info-item"><label>可买数量</label><span>${c.qty.toFixed(4)}</span></div><div class="info-item"><label>扣除保证金</label><span style="color:var(--red)">-$${c.margin.toFixed(2)}</span></div><div class="info-item"><label>杠杆</label><span>${c.lev}×</span></div><div class="info-item"><label>开仓手续费</label><span style="color:var(--orange)">$${c.openFee.toFixed(2)}</span></div>`;
   ['log-reason','log-note'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('log-tp').value=''; resetEntryType();
   document.getElementById('log-overlay').classList.add('show');
@@ -1846,7 +1856,7 @@ async function saveLog() {
   const reason=buildReasonText(logEntryStyle,logEntryCategory,logEntryTF,reasonNote);
   const sym=document.getElementById('symbol').value.trim().toUpperCase()||'未知品种';
   const c=lastCalc, id=await getNextId();
-  const trade={id,time:fmtNow(),symbol:sym,direction,entry:c.entry,stop:c.stop,leverage:c.lev,qty:+c.qty.toFixed(6),marginQty:+c.mQty.toFixed(4),positionSize:+c.posSize.toFixed(2),margin:+c.margin.toFixed(2),riskAmount:+c.riskAmt.toFixed(2),stopPct:+c.stopPct.toFixed(2),entryStyle:logEntryStyle,entryCategory:logEntryCategory,entryTimeframe:logEntryTF,reason,reasonNote,exitPlan:buildExitPlan(logEntryCategory),tp:parseFloat(document.getElementById('log-tp').value)||null,note:document.getElementById('log-note').value.trim(),closedMarginQty:0,closes:[],result:null,resultAmount:null,marginDeducted:true};
+  const trade={id,time:fmtNow(),symbol:sym,direction,entry:c.entry,stop:c.stop,leverage:c.lev,qty:+c.qty.toFixed(6),marginQty:+c.mQty.toFixed(4),positionSize:+c.posSize.toFixed(2),margin:+c.margin.toFixed(2),riskAmount:+c.riskAmt.toFixed(2),stopPct:+c.stopPct.toFixed(2),entryFee:+c.openFee.toFixed(4),feeRate:activeFeeRate,entryStyle:logEntryStyle,entryCategory:logEntryCategory,entryTimeframe:logEntryTF,reason,reasonNote,exitPlan:buildExitPlan(logEntryCategory),tp:parseFloat(document.getElementById('log-tp').value)||null,note:document.getElementById('log-note').value.trim(),closedMarginQty:0,closes:[],result:null,resultAmount:null,marginDeducted:true};
   const trades=await readSymbolTrades(sym); trades.push(trade); await writeSymbolTrades(sym,trades);
   await applyBalanceDelta(-trade.margin); tradesCache=[...tradesCache,trade];
   refreshAccountPanel(); await populateSymbolList(); closeOverlay('log-overlay'); updateStorageIndicator(); markDirty();
@@ -1893,11 +1903,18 @@ function recalcPnL() {
   const t=document.getElementById('update-overlay')._trade, closeQty=parseFloat(document.getElementById('update-closeqty').value), exit=parseFloat(document.getElementById('update-exit').value);
   const preview=document.getElementById('pnl-preview');
   if(!t||isNaN(closeQty)||isNaN(exit)||closeQty<=0||exit<=0){preview.textContent='选择平仓比例并填写出场价格后自动计算盈亏';preview.className='pnl-preview';return;}
-  const lev=t.leverage||1, pnl=t.direction==='long'?closeQty*lev*(exit-t.entry):closeQty*lev*(t.entry-exit);
+  const lev=t.leverage||1, pnlGross=t.direction==='long'?closeQty*lev*(exit-t.entry):closeQty*lev*(t.entry-exit);
+  const fr=t.feeRate||activeFeeRate;
+  const entryPosVal=t.positionSize||(t.marginQty*lev*t.entry);
+  const entryFeeShare=+((closeQty/t.marginQty)*(t.entryFee||(entryPosVal*fr))).toFixed(4);
+  const closeFee=+(closeQty*lev*exit*fr).toFixed(4);
+  const totalFee=+(entryFeeShare+closeFee).toFixed(4);
+  const pnl=+(pnlGross-totalFee).toFixed(2);
   const retMargin=t.marginDeducted?(closeQty/t.marginQty)*t.margin:0, net=pnl+retMargin;
   const rem=remainingQty(t), pctOfRem=rem>0?(closeQty/rem*100).toFixed(1):'0';
   const marginLine=retMargin>0?`解锁保证金：+$${retMargin.toFixed(2)}　到账合计：${net>=0?'+':''}$${net.toFixed(2)}<br>`:'';
-  preview.innerHTML=`盈亏：<b>${pnl>=0?'+':''}$${pnl.toFixed(2)}</b>　${marginLine}R值：${(Math.abs(pnl)/(t.riskAmount||1)).toFixed(2)}R　本次平 ${pctOfRem}% 剩余仓位`;
+  const feeLine=totalFee>0?`手续费：-$${totalFee.toFixed(2)}（开 $${entryFeeShare.toFixed(2)} + 平 $${closeFee.toFixed(2)}）<br>`:'';
+  preview.innerHTML=`毛盈亏：<b>${pnlGross>=0?'+':''}$${pnlGross.toFixed(2)}</b>　${feeLine}净盈亏：<b>${pnl>=0?'+':''}$${pnl.toFixed(2)}</b>　${marginLine}R值：${(Math.abs(pnl)/(t.riskAmount||1)).toFixed(2)}R　本次平 ${pctOfRem}% 剩余仓位`;
   preview.className='pnl-preview '+(pnl>0?'profit':pnl<0?'loss':'');
 }
 
@@ -1908,11 +1925,17 @@ async function saveResult() {
   if(isNaN(exit)||exit<=0){alert('请填写出场价格');return;}
   const trades=await readSymbolTrades(symbol); const idx=trades.findIndex(t=>t.id===id); if(idx===-1){alert('找不到该记录');return;}
   const t=trades[idx], lev=t.leverage||1;
-  const pnl=t.direction==='long'?closeQty*lev*(exit-t.entry):closeQty*lev*(t.entry-exit);
+  const pnlGross=t.direction==='long'?closeQty*lev*(exit-t.entry):closeQty*lev*(t.entry-exit);
+  const fr=t.feeRate||activeFeeRate;
+  const entryPosVal=t.positionSize||(t.marginQty*lev*t.entry);
+  const entryFeeShare=+((closeQty/t.marginQty)*(t.entryFee||(entryPosVal*fr))).toFixed(4);
+  const closeFee=+(closeQty*lev*exit*fr).toFixed(4);
+  const totalFee=+(entryFeeShare+closeFee).toFixed(4);
+  const pnl=+(pnlGross-totalFee).toFixed(2);
   const retMargin=t.marginDeducted?(closeQty/t.marginQty)*t.margin:0;
   const manualResult=document.getElementById('update-result').value;
   const closeResult=manualResult||(pnl>0?'profit':pnl<0?'loss':'breakeven');
-  const closeRecord={time:fmtNow(),marginQty:closeQty,exitPrice:exit,pnl:+pnl.toFixed(2),margin:+retMargin.toFixed(2),cashDelta:+(pnl+retMargin).toFixed(2),result:closeResult,note:document.getElementById('update-note').value.trim()};
+  const closeRecord={time:fmtNow(),marginQty:closeQty,exitPrice:exit,pnl:+pnl.toFixed(2),pnlGross:+pnlGross.toFixed(2),fee:+totalFee.toFixed(4),margin:+retMargin.toFixed(2),cashDelta:+(pnl+retMargin).toFixed(2),result:closeResult,note:document.getElementById('update-note').value.trim()};
   t.closes=(t.closes||[]); t.closes.push(closeRecord); t.closedMarginQty=+((t.closedMarginQty||0)+closeQty).toFixed(6);
   const tp=parseFloat(document.getElementById('update-tp').value); if(tp)t.tp=tp;
   t.updateNote=closeRecord.note;
@@ -1956,8 +1979,7 @@ async function renderTrades() {
   const symF=symSel.value,stF=document.getElementById('filter-status').value;
   let filtered=all;
   if(symF)filtered=filtered.filter(t=>t.symbol===symF);
-  if(stF==='open')filtered=filtered.filter(t=>!isFullyClosed(t)&&!(t.closes?.length));
-  else if(stF==='partial')filtered=filtered.filter(t=>!isFullyClosed(t)&&t.closes?.length>0);
+  if(stF==='open')filtered=filtered.filter(t=>!isFullyClosed(t));
   else if(stF==='profit')filtered=filtered.filter(t=>isFullyClosed(t)&&effectiveResult(t)==='profit');
   else if(stF==='loss')filtered=filtered.filter(t=>isFullyClosed(t)&&effectiveResult(t)==='loss');
   else if(stF==='breakeven')filtered=filtered.filter(t=>isFullyClosed(t)&&effectiveResult(t)==='breakeven');
@@ -1972,7 +1994,7 @@ function renderCard(t, all) {
   const num=all.findIndex(x=>x.id===t.id)+1, rem=remainingQty(t), closed=isFullyClosed(t), partial=!closed&&(t.closes?.length>0);
   const res=closed?effectiveResult(t):null, amt=closed?effectiveAmount(t):null;
   const dirBadge=t.direction==='long'?'<span class="badge badge-long">做多 ▲</span>':'<span class="badge badge-short">做空 ▼</span>';
-  const resBadge=!closed?(partial?`<span class="badge badge-partial">部分平仓 剩${rem}</span>`:'<span class="badge badge-open">持仓中</span>'):res==='profit'?`<span class="badge badge-profit">盈利 +$${Math.abs(amt).toFixed(2)}</span>`:res==='loss'?`<span class="badge badge-loss">亏损 -$${Math.abs(amt).toFixed(2)}</span>`:'<span class="badge badge-be">保本</span>';
+  const resBadge=!closed?`<span class="badge badge-open">持仓中${partial?' · 剩'+rem:''}</span>`:res==='profit'?`<span class="badge badge-profit">盈利 +$${Math.abs(amt).toFixed(2)}</span>`:res==='loss'?`<span class="badge badge-loss">亏损 -$${Math.abs(amt).toFixed(2)}</span>`:'<span class="badge badge-be">保本</span>';
   const cardCls=!closed?t.direction:res==='profit'?'profit':res==='loss'?'loss':t.direction;
   const closesHTML=t.closes?.length?`<div class="closes-list">${t.closes.map((c,i)=>{const pnlVal=c.pnl??c.amount??0;const sign=pnlVal>=0?'+':'';const marginStr=c.margin!=null?`<br>保证金 +$${c.margin}`:'';return`<div class="close-item"><span class="ci-left">平仓${i+1}：${c.marginQty}手 @ ${c.exitPrice}<br>${c.time}</span><span class="ci-right ${c.result}">${sign}$${pnlVal.toFixed(2)}${marginStr}${c.note?' · '+c.note:''}</span></div>`;}).join('')}</div>`:'' ;
   let summaryHTML='';
@@ -2023,6 +2045,14 @@ async function reconcileBalance() {
 function fmtNow() { const d=new Date(),p=n=>String(n).padStart(2,'0'); return`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; }
 function parseTime(s) { if(!s)return null; const m=s.match(/(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/); return m?new Date(+m[1],+m[2]-1,+m[3],+m[4],+m[5]).getTime():null; }
 function closeOverlay(id) { document.getElementById(id).classList.remove('show'); }
+
+// ── Fee Rate ───────────────────────────────────────────────────────────────
+function saveFeeRate() {
+  const v = parseFloat(document.getElementById('fee-rate').value);
+  if (isNaN(v) || v < 0) return;
+  activeFeeRate = v / 100;
+  if (activeProfileId) { readMeta().then(m => writeMeta({ ...m, feeRate: activeFeeRate })).catch(console.error); }
+}
 
 // ── Event Listeners ────────────────────────────────────────────────────────
 document.querySelectorAll('input').forEach(el => el.addEventListener('keydown', e => { if(e.key==='Enter'&&!el.closest('#update-overlay')&&!el.closest('#log-overlay'))calculate(); }));
@@ -2248,6 +2278,9 @@ document.addEventListener('visibilitychange', () => {
   try {
     await initProfiles();
     await restoreBalance();
+    const _m = await readMeta();
+    activeFeeRate = _m.feeRate ?? 0.0006;
+    document.getElementById('fee-rate').value = +(activeFeeRate * 100).toFixed(4);
     await populateSymbolList();
     tradesCache = await readAllTrades();
     refreshAccountPanel();
