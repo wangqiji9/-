@@ -2036,7 +2036,7 @@ document.addEventListener('click', e => {
   const trigger = document.getElementById('profile-trigger');
   const dropdown = document.getElementById('profile-dropdown');
   if (trigger && !trigger.contains(e.target) && dropdown && !dropdown.contains(e.target)) {
-    if (profileDropdownOpen) closeProfileDropdown();
+    if (dropdown.classList.contains('show')) closeProfileDropdown();
   }
 });
 
@@ -2097,10 +2097,10 @@ async function syncToCloud(silent = false) {
   try {
     const res = await fetch(`${JSONBIN_BASE}/${syncBinId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncApiKey },
+      headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncApiKey, 'X-Bin-Versioning': 'false' },
       body: JSON.stringify(await exportAllForSync()),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.message || `HTTP ${res.status}`); }
     localDirty = false;
     localStorage.setItem('lastSyncTime', String(Date.now()));
     setSyncDot('synced');
