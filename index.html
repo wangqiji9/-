@@ -771,22 +771,17 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
 <div class="overlay" id="sync-overlay">
   <div class="modal" style="width:480px">
     <h2>☁ 云同步设置</h2>
-    <p class="modal-sub">使用 JSONBin.io 免费服务在多设备间同步所有 Profile 数据</p>
+    <p class="modal-sub">使用 jsonblob.com 免费服务在多设备间同步数据（无需注册）</p>
 
     <div class="sync-section">
-      <h3>API 配置</h3>
-      <div class="field">
-        <label>Master Key（在 jsonbin.io → Account → API Keys 获取）</label>
-        <input type="password" id="sync-apikey" placeholder="$2b$10$..." autocomplete="off">
-      </div>
+      <h3>数据 ID</h3>
       <div class="field" style="margin-bottom:6px">
-        <label>Bin ID</label>
         <div class="sync-row">
-          <input type="text" id="sync-bin-id" placeholder="首次使用点击右侧创建" style="flex:1">
-          <button class="btn-sm btn-update" onclick="createNewBin()" style="white-space:nowrap;flex-shrink:0">创建新 Bin</button>
+          <input type="text" id="sync-bin-id" placeholder="首次使用点右侧创建" style="flex:1">
+          <button class="btn-sm btn-update" onclick="createNewBlob()" style="white-space:nowrap;flex-shrink:0">创建新存储</button>
         </div>
       </div>
-      <div class="sync-hint">① 注册 <a href="https://jsonbin.io" target="_blank" style="color:var(--accent)">jsonbin.io</a> 免费账号 → ② 复制 Master Key → ③ 点「创建新 Bin」自动生成 ID</div>
+      <div class="sync-hint">首次使用：点「创建新存储」自动生成 ID。其他设备：填入同一个 ID 即可同步。</div>
     </div>
 
     <div class="sync-section">
@@ -807,7 +802,7 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
           <span class="toggle-slider"></span>
         </label>
       </div>
-      <div class="sync-hint">开启后：每 2 分钟检查本地是否有新数据，有则自动推送；切换设备时打开页面自动拉取；关闭标签页时自动推送。</div>
+      <div class="sync-hint">开启后：每 2 分钟自动推送新数据；切换设备打开页面自动拉取；关闭页面自动推送。</div>
     </div>
 
     <div class="modal-btns">
@@ -2041,9 +2036,8 @@ document.addEventListener('click', e => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
-// ── Cloud Sync ─────────────────────────────────────────────────────────────
-const JSONBIN_BASE = 'https://api.jsonbin.io/v3/b';
-let syncApiKey = localStorage.getItem('syncApiKey') || '';
+// ── Cloud Sync (jsonblob.com) ──────────────────────────────────────────────
+const SYNC_API = 'https://jsonblob.com/api/jsonBlob';
 let syncBinId  = localStorage.getItem('syncBinId')  || '';
 let autoSyncEnabled = localStorage.getItem('autoSyncEnabled') === 'true';
 let syncTimer = null;
@@ -2054,7 +2048,7 @@ function markDirty() {
   localStorage.setItem('lastLocalChange', String(Date.now()));
 }
 
-function setSyncDot(state) { // 'idle'|'syncing'|'synced'|'error'|'off'
+function setSyncDot(state) {
   const el = document.getElementById('sync-status-dot');
   if (el) { el.className = 'sync-dot'; if (state !== 'off') el.classList.add(state); }
 }
@@ -2092,15 +2086,15 @@ async function importAllFromSync(payload) {
 }
 
 async function syncToCloud(silent = false) {
-  if (!syncApiKey || !syncBinId) { if (!silent) alert('请先在云同步设置中填写 API Key 和 Bin ID'); return false; }
+  if (!syncBinId) { if (!silent) alert('请先创建存储或填写 ID'); return false; }
   setSyncDot('syncing');
   try {
-    const res = await fetch(`${JSONBIN_BASE}/${syncBinId}`, {
+    const res = await fetch(`${SYNC_API}/${syncBinId}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': syncApiKey, 'X-Bin-Versioning': 'false' },
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
       body: JSON.stringify(await exportAllForSync()),
     });
-    if (!res.ok) { const e = await res.json().catch(()=>({})); throw new Error(e.message || `HTTP ${res.status}`); }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     localDirty = false;
     localStorage.setItem('lastSyncTime', String(Date.now()));
     setSyncDot('synced');
@@ -2114,15 +2108,15 @@ async function syncToCloud(silent = false) {
 }
 
 async function pullFromCloud(silent = false) {
-  if (!syncApiKey || !syncBinId) { if (!silent) alert('请先在云同步设置中填写 API Key 和 Bin ID'); return false; }
+  if (!syncBinId) { if (!silent) alert('请先填写存储 ID'); return false; }
   setSyncDot('syncing');
   try {
-    const res = await fetch(`${JSONBIN_BASE}/${syncBinId}/latest`, {
-      headers: { 'X-Master-Key': syncApiKey }
+    const res = await fetch(`${SYNC_API}/${syncBinId}`, {
+      headers: { 'Accept': 'application/json' }
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    await importAllFromSync(json.record);
+    const payload = await res.json();
+    await importAllFromSync(payload);
     localDirty = false;
     localStorage.setItem('lastSyncTime', String(Date.now()));
     setSyncDot('synced');
@@ -2135,22 +2129,24 @@ async function pullFromCloud(silent = false) {
   }
 }
 
-async function createNewBin() {
-  const key = document.getElementById('sync-apikey').value.trim();
-  if (!key) { alert('请先填写 API Key'); return; }
+async function createNewBlob() {
   setSyncDot('syncing');
   try {
-    const res = await fetch(JSONBIN_BASE, {
+    const payload = await exportAllForSync();
+    const res = await fetch(SYNC_API, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Master-Key': key, 'X-Bin-Name': 'trade-journal', 'X-Bin-Private': 'true' },
-      body: JSON.stringify(await exportAllForSync()),
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    const id = json.metadata.id;
+    const loc = res.headers.get('Location') || '';
+    const id = loc.split('/').pop();
+    if (!id) throw new Error('未获取到存储 ID');
+    syncBinId = id;
+    localStorage.setItem('syncBinId', id);
     document.getElementById('sync-bin-id').value = id;
     setSyncDot('synced');
-    alert(`✓ Bin 创建成功！\nBin ID：${id}\n\n请点「保存设置」完成配置。`);
+    alert('✓ 创建成功！\n存储 ID：' + id + '\n\n请点「保存设置」完成配置。\n在其他设备填入此 ID 即可同步。');
   } catch(e) {
     setSyncDot('error');
     alert('创建失败：' + e.message);
@@ -2159,38 +2155,34 @@ async function createNewBin() {
 
 function startAutoSync() {
   if (syncTimer) { clearInterval(syncTimer); syncTimer = null; }
-  if (!autoSyncEnabled || !syncApiKey || !syncBinId) return;
+  if (!autoSyncEnabled || !syncBinId) return;
   syncTimer = setInterval(async () => { if (localDirty) await syncToCloud(true); }, 2 * 60 * 1000);
 }
 
 function openSyncSettings() {
-  document.getElementById('sync-apikey').value = syncApiKey;
   document.getElementById('sync-bin-id').value = syncBinId;
   document.getElementById('sync-auto-toggle').checked = autoSyncEnabled;
   document.getElementById('sync-overlay').classList.add('show');
 }
 
 function saveSyncSettings() {
-  syncApiKey = document.getElementById('sync-apikey').value.trim();
-  syncBinId  = document.getElementById('sync-bin-id').value.trim();
+  syncBinId = document.getElementById('sync-bin-id').value.trim();
   autoSyncEnabled = document.getElementById('sync-auto-toggle').checked;
-  localStorage.setItem('syncApiKey', syncApiKey);
-  localStorage.setItem('syncBinId',  syncBinId);
+  localStorage.setItem('syncBinId', syncBinId);
   localStorage.setItem('autoSyncEnabled', String(autoSyncEnabled));
   startAutoSync();
-  setSyncDot(syncApiKey && syncBinId ? 'synced' : 'off');
+  setSyncDot(syncBinId ? 'synced' : 'off');
   closeOverlay('sync-overlay');
   showSyncToast('✓ 同步设置已保存');
 }
 
 async function initCloudSync() {
-  if (!syncApiKey || !syncBinId) { setSyncDot('off'); return; }
+  if (!syncBinId) { setSyncDot('off'); return; }
   setSyncDot('syncing');
   try {
-    const res = await fetch(`${JSONBIN_BASE}/${syncBinId}/latest`, { headers: { 'X-Master-Key': syncApiKey } });
+    const res = await fetch(`${SYNC_API}/${syncBinId}`, { headers: { 'Accept': 'application/json' } });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
-    const cloud = json.record;
+    const cloud = await res.json();
     const cloudTime = new Date(cloud?.lastModified || 0).getTime();
     const localTime = parseInt(localStorage.getItem('lastLocalChange') || '0');
     if (cloudTime > localTime) {
@@ -2208,10 +2200,10 @@ async function initCloudSync() {
 
 // 关闭/隐藏时自动推送
 window.addEventListener('beforeunload', () => {
-  if (localDirty && syncApiKey && syncBinId) syncToCloud(true);
+  if (localDirty && syncBinId) syncToCloud(true);
 });
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && localDirty && syncApiKey && syncBinId) syncToCloud(true);
+  if (document.visibilityState === 'hidden' && localDirty && syncBinId) syncToCloud(true);
 });
 
 // ── PWA ────────────────────────────────────────────────────────────────────
