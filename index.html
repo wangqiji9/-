@@ -771,17 +771,14 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
 <div class="overlay" id="sync-overlay">
   <div class="modal" style="width:480px">
     <h2>☁ 云同步设置</h2>
-    <p class="modal-sub">使用 jsonblob.com 免费服务在多设备间同步数据（无需注册）</p>
+    <p class="modal-sub">使用 npoint.io 免费服务在多设备间同步数据（无需注册、无大小限制）</p>
 
     <div class="sync-section">
       <h3>数据 ID</h3>
       <div class="field" style="margin-bottom:6px">
-        <div class="sync-row">
-          <input type="text" id="sync-bin-id" placeholder="首次使用点右侧创建" style="flex:1">
-          <button class="btn-sm btn-update" onclick="createNewBlob()" style="white-space:nowrap;flex-shrink:0">创建新存储</button>
-        </div>
+        <input type="text" id="sync-bin-id" placeholder="粘贴 npoint.io 文档 ID">
       </div>
-      <div class="sync-hint">首次使用：点「创建新存储」自动生成 ID。其他设备：填入同一个 ID 即可同步。</div>
+      <div class="sync-hint">① 打开 <a href="https://www.npoint.io/" target="_blank" style="color:var(--accent)">npoint.io</a> → ② 点 Create JSON Bin → ③ 内容留空直接 Save → ④ 从 URL 复制 ID（如 <code style="color:var(--teal)">abc123def</code>）→ ⑤ 粘贴到上方</div>
     </div>
 
     <div class="sync-section">
@@ -2036,8 +2033,8 @@ document.addEventListener('click', e => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
-// ── Cloud Sync (jsonblob.com) ──────────────────────────────────────────────
-const SYNC_API = 'https://jsonblob.com/api/jsonBlob';
+// ── Cloud Sync (npoint.io) ────────────────────────────────────────────────
+const SYNC_API = 'https://api.npoint.io';
 let syncBinId  = localStorage.getItem('syncBinId')  || '';
 let autoSyncEnabled = localStorage.getItem('autoSyncEnabled') === 'true';
 let syncTimer = null;
@@ -2086,12 +2083,12 @@ async function importAllFromSync(payload) {
 }
 
 async function syncToCloud(silent = false) {
-  if (!syncBinId) { if (!silent) alert('请先创建存储或填写 ID'); return false; }
+  if (!syncBinId) { if (!silent) alert('请先填写文档 ID'); return false; }
   setSyncDot('syncing');
   try {
     const res = await fetch(`${SYNC_API}/${syncBinId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(await exportAllForSync()),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -2108,12 +2105,10 @@ async function syncToCloud(silent = false) {
 }
 
 async function pullFromCloud(silent = false) {
-  if (!syncBinId) { if (!silent) alert('请先填写存储 ID'); return false; }
+  if (!syncBinId) { if (!silent) alert('请先填写文档 ID'); return false; }
   setSyncDot('syncing');
   try {
-    const res = await fetch(`${SYNC_API}/${syncBinId}`, {
-      headers: { 'Accept': 'application/json' }
-    });
+    const res = await fetch(`${SYNC_API}/${syncBinId}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const payload = await res.json();
     await importAllFromSync(payload);
@@ -2126,30 +2121,6 @@ async function pullFromCloud(silent = false) {
     setSyncDot('error');
     if (!silent) alert('拉取失败：' + e.message);
     return false;
-  }
-}
-
-async function createNewBlob() {
-  setSyncDot('syncing');
-  try {
-    const payload = await exportAllForSync();
-    const res = await fetch(SYNC_API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const loc = res.headers.get('Location') || '';
-    const id = loc.split('/').pop();
-    if (!id) throw new Error('未获取到存储 ID');
-    syncBinId = id;
-    localStorage.setItem('syncBinId', id);
-    document.getElementById('sync-bin-id').value = id;
-    setSyncDot('synced');
-    alert('✓ 创建成功！\n存储 ID：' + id + '\n\n请点「保存设置」完成配置。\n在其他设备填入此 ID 即可同步。');
-  } catch(e) {
-    setSyncDot('error');
-    alert('创建失败：' + e.message);
   }
 }
 
@@ -2180,7 +2151,7 @@ async function initCloudSync() {
   if (!syncBinId) { setSyncDot('off'); return; }
   setSyncDot('syncing');
   try {
-    const res = await fetch(`${SYNC_API}/${syncBinId}`, { headers: { 'Accept': 'application/json' } });
+    const res = await fetch(`${SYNC_API}/${syncBinId}`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const cloud = await res.json();
     const cloudTime = new Date(cloud?.lastModified || 0).getTime();
