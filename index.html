@@ -470,7 +470,11 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
     <div class="col-right">
       <div class="result-panel">
         <div class="result-rows">
-          <div class="result-row"><span class="rl">最大亏损金额</span><span class="rv empty" id="r-risk">——</span></div>
+          <div class="result-row"><span class="rl">最大亏损金额 <span style="font-size:10px;color:var(--text-tertiary)" id="r-risk-basis"></span></span><span class="rv empty" id="r-risk">——</span></div>
+          <div class="result-row" id="r-risk-breakdown-row" style="display:none">
+            <span class="rl">风险分配</span>
+            <span class="rv" id="r-risk-breakdown" style="font-size:12px">——</span>
+          </div>
           <div class="result-row"><span class="rl">止损幅度</span><span class="rv empty" id="r-pct">——</span></div>
           <div class="result-row"><span class="rl">可买数量</span><span class="rv empty" id="r-qty">——</span></div>
           <div class="result-row"><span class="rl">总仓位价值</span><span class="rv empty" id="r-size">——</span></div>
@@ -1126,6 +1130,10 @@ async function switchProfile(pid) {
   document.getElementById('btn-log').classList.add('btn-disabled');
   hideLiqCheck();
   ['r-risk','r-pct','r-qty','r-size','r-margin','r-fee'].forEach(id => setRV(id, '——', true));
+  const brkRowReset = document.getElementById('r-risk-breakdown-row');
+  if (brkRowReset) brkRowReset.style.display = 'none';
+  const basisReset = document.getElementById('r-risk-basis');
+  if (basisReset) basisReset.textContent = '';
 
   // Reload trades
   tradesCache = await readAllProfileTrades(pid);
@@ -1624,15 +1632,54 @@ function calculate() {
   if ([entry,stop,bal,rPct,lev].some(v=>isNaN(v)||v<=0)) { errEl.textContent='请填写所有字段，且数值需大于 0'; errEl.style.display='block'; return; }
   if (direction==='long' && stop>=entry) { errEl.textContent='做多时止损价格应低于入场价格'; errEl.style.display='block'; return; }
   if (direction==='short' && stop<=entry) { errEl.textContent='做空时止损价格应高于入场价格'; errEl.style.display='block'; return; }
-  const riskAmt=bal*(rPct/100), stopDist=Math.abs(entry-stop), stopPct=(stopDist/entry)*100;
-  const qty=riskAmt/stopDist, posSize=qty*entry, margin=posSize/lev, mQty=margin/entry;
-  setRV('r-risk','$'+riskAmt.toFixed(2)); setRV('r-pct',stopPct.toFixed(2)+'%');
-  setRV('r-qty',qty.toFixed(6)); setRV('r-size','$'+posSize.toFixed(2));
-  setRV('r-margin','$'+margin.toFixed(2));
-  const openFee=+(posSize*activeFeeRate).toFixed(4);
-  setRV('r-fee','$'+openFee.toFixed(2)+' ('+(activeFeeRate*100).toFixed(2)+'%)');
+
+  // Use total equity (available balance + used margin) as risk base
+  const usedMargin = getUsedMargin();
+  const totalEquity = bal + usedMargin;
+  const riskAmt = totalEquity * (rPct / 100);
+
+  const stopDist = Math.abs(entry - stop);
+  const stopPct = (stopDist / entry) * 100;
+  const f = activeFeeRate;
+
+  // Fee-inclusive position sizing:
+  // Total loss at stop = posSize * stopPct/100 + posSize * f + posSize * (stop/entry) * f
+  // = posSize * [stopPct/100 + f * (1 + stop/entry)]
+  // Set total loss = riskAmt, solve for posSize:
+  const feeFactor = f * (1 + stop / entry);
+  const totalCostPerUnit = stopDist / entry + feeFactor;
+  const posSize = riskAmt / totalCostPerUnit;
+  const qty = posSize / entry;
+  const margin = posSize / lev;
+  const mQty = margin / entry;
+
+  const openFee = +(posSize * f).toFixed(4);
+  const closeFeeAtStop = +(posSize * (stop / entry) * f).toFixed(4);
+  const priceLoss = +(posSize * stopDist / entry).toFixed(2);
+  const totalFeeAtStop = +(openFee + closeFeeAtStop).toFixed(2);
+
+  setRV('r-risk', '$' + riskAmt.toFixed(2));
+  const basisEl = document.getElementById('r-risk-basis');
+  if (basisEl) {
+    if (usedMargin > 0.01) basisEl.textContent = '(总权益 $' + totalEquity.toFixed(2) + ')';
+    else basisEl.textContent = '';
+  }
+  // Render risk breakdown
+  const brkRow = document.getElementById('r-risk-breakdown-row');
+  const brkVal = document.getElementById('r-risk-breakdown');
+  if (brkRow && brkVal) {
+    brkRow.style.display = 'flex';
+    brkVal.innerHTML = '价格 $' + priceLoss + ' + 手续费 $' + totalFeeAtStop + ' = $' + riskAmt.toFixed(2);
+  }
+  setRV('r-pct', stopPct.toFixed(2) + '%');
+  setRV('r-qty', qty.toFixed(6));
+  setRV('r-size', '$' + posSize.toFixed(2));
+  setRV('r-margin', '$' + margin.toFixed(2));
+  const feeRatePct = (f * 100).toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+  setRV('r-fee', '$' + openFee.toFixed(2) + ' (' + feeRatePct + '%)');
+
   localStorage.setItem('traderBalance', bal); updateBalanceDisplay(bal);
-  lastCalc = { entry, stop, bal, rPct, lev, riskAmt, stopPct, qty, posSize, margin, mQty, openFee };
+  lastCalc = { entry, stop, bal, rPct, lev, riskAmt, stopPct, qty, posSize, margin, mQty, openFee, priceLoss, totalFeeAtStop, totalEquity, usedMargin };
   renderLiqCheck(entry, stop, lev, direction, margin, posSize);
   const { stopValid } = checkLiquidation(entry, stop, lev, direction);
   if (stopValid) document.getElementById('btn-log').classList.remove('btn-disabled');
