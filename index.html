@@ -377,6 +377,59 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
   .stat-cell.wide { grid-column: span 2; }
   .stat-cell.span3 { grid-column: span 2; }
 }
+
+/* ── Checklist ── */
+.cl-modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:18px; }
+.cl-modal-header h2 { font-size:17px; font-weight:600; }
+.cl-edit-toggle-btn { padding:5px 12px; border:1px solid var(--border); border-radius:6px; background:transparent; color:var(--text-secondary); font-size:12px; cursor:pointer; transition:all 0.15s; font-family:inherit; }
+.cl-edit-toggle-btn:hover { border-color:var(--accent); color:var(--accent); }
+.cl-edit-toggle-btn.active { border-color:var(--orange); color:var(--orange); }
+
+.cl-view-area.hidden { display:none; }
+.cl-edit-area { display:none; }
+.cl-edit-area.show { display:block; }
+
+.cl-category { margin-bottom:14px; }
+.cl-cat-label-row { display:flex; align-items:center; justify-content:space-between; padding:4px 0 6px; border-bottom:1px solid var(--border); margin-bottom:4px; }
+.cl-cat-label { font-size:12px; font-weight:700; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; }
+.cl-cat-req-count { font-size:10px; color:var(--text-tertiary); }
+
+.cl-item { display:flex; align-items:center; gap:10px; padding:9px 8px; border-radius:8px; cursor:pointer; transition:background 0.12s; margin-bottom:2px; }
+.cl-item:hover { background:rgba(255,255,255,0.04); }
+.cl-item input[type=checkbox] { width:17px; height:17px; accent-color:var(--accent); cursor:pointer; flex-shrink:0; }
+.cl-item-text { font-size:14px; color:var(--text-primary); flex:1; line-height:1.4; transition:color 0.15s; }
+.cl-item-text.done { color:var(--text-tertiary); text-decoration:line-through; }
+.cl-req-pip { width:5px; height:5px; border-radius:50%; flex-shrink:0; background:var(--red); }
+.cl-opt-pip { width:5px; height:5px; border-radius:50%; flex-shrink:0; background:transparent; }
+
+.cl-footer { margin-top:18px; padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; gap:12px; }
+.cl-progress { font-size:12px; color:var(--text-secondary); flex:1; }
+.cl-progress .ok  { color:var(--green); font-weight:600; }
+.cl-progress .pending { color:var(--orange); }
+.cl-confirm-btn { padding:10px 22px; border:none; border-radius:var(--radius-sm); background:var(--accent); color:#fff; font-size:14px; cursor:pointer; font-weight:600; transition:all 0.2s; font-family:inherit; white-space:nowrap; }
+.cl-confirm-btn:hover:not(:disabled) { opacity:0.85; }
+.cl-confirm-btn:disabled { background:var(--bg-elevated); color:var(--text-tertiary); cursor:not-allowed; }
+
+/* edit mode */
+.cl-edit-cat { background:var(--bg-elevated); border-radius:var(--radius-sm); padding:12px; margin-bottom:8px; border:1px solid var(--border); }
+.cl-edit-cat-hd { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.cl-edit-cat-input { flex:1; padding:7px 10px; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:13px; font-weight:600; outline:none; font-family:inherit; }
+.cl-edit-cat-input:focus { border-color:var(--accent); }
+.cl-edit-item-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
+.cl-edit-item-input { flex:1; padding:7px 10px; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:13px; outline:none; font-family:inherit; }
+.cl-edit-item-input:focus { border-color:var(--accent); }
+.cl-req-toggle { padding:4px 9px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer; border:none; font-family:inherit; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
+.cl-req-toggle.req  { background:rgba(255,69,58,0.15); color:var(--red); }
+.cl-req-toggle.opt  { background:rgba(255,255,255,0.06); color:var(--text-tertiary); }
+.cl-add-item-btn { width:100%; padding:6px; border:1px dashed rgba(255,255,255,0.1); border-radius:6px; background:transparent; color:var(--text-tertiary); font-size:12px; cursor:pointer; margin-top:4px; transition:all 0.15s; font-family:inherit; }
+.cl-add-item-btn:hover { border-color:var(--accent); color:var(--accent); }
+.cl-add-cat-btn { width:100%; padding:9px; border:1px dashed rgba(255,255,255,0.1); border-radius:var(--radius-sm); background:transparent; color:var(--text-tertiary); font-size:13px; cursor:pointer; margin-top:4px; transition:all 0.15s; font-family:inherit; }
+.cl-add-cat-btn:hover { border-color:var(--green); color:var(--green); }
+
+/* badge in trade card */
+.cl-badge { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:600; }
+.cl-badge.pass { background:rgba(48,209,88,0.1); color:var(--green); }
+.cl-badge.partial { background:rgba(255,159,10,0.1); color:var(--orange); }
 </style>
 </head>
 <body>
@@ -510,8 +563,9 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
         </div>
 
         <div class="action-btns">
-          <button class="btn-log btn-disabled" id="btn-log" onclick="openLogModal()">+ 记录此交易</button>
+          <button class="btn-log btn-disabled" id="btn-log" onclick="openChecklistModal()">+ 记录此交易</button>
           <button class="btn-journal" onclick="openJournal()">查看日志</button>
+          <button class="btn-journal" onclick="openChecklistEditDirect()" title="编辑开单自查清单" style="flex:0;padding:10px 12px;">📋</button>
         </div>
       </div>
     </div>
@@ -825,6 +879,35 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
 </div>
 
 <div class="sync-toast" id="sync-toast"></div>
+
+<!-- Checklist Modal -->
+<div class="overlay" id="checklist-overlay">
+  <div class="modal" style="width:520px;max-height:88vh;">
+    <div class="cl-modal-header">
+      <h2>📋 开单自查</h2>
+      <button class="cl-edit-toggle-btn" id="cl-edit-toggle-btn" onclick="toggleChecklistEdit()">编辑清单</button>
+    </div>
+
+    <!-- View mode -->
+    <div class="cl-view-area" id="cl-view-area">
+      <div id="cl-items-container"></div>
+      <div class="cl-footer">
+        <div class="cl-progress" id="cl-progress"></div>
+        <button class="cl-confirm-btn" id="cl-confirm-btn" onclick="confirmChecklist()" disabled>确认，去开单 →</button>
+      </div>
+    </div>
+
+    <!-- Edit mode -->
+    <div class="cl-edit-area" id="cl-edit-area">
+      <div id="cl-edit-container" style="max-height:60vh;overflow-y:auto;padding-right:2px;"></div>
+      <button class="cl-add-cat-btn" onclick="clAddCategory()">＋ 添加分类</button>
+      <div class="modal-btns" style="margin-top:12px;">
+        <button class="btn-cancel" onclick="clCancelEdit()">取消</button>
+        <button class="btn-primary" onclick="clSaveEdit()">保存清单</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <input type="file" class="hidden-input" id="import-file" accept=".json" onchange="handleImportFile(this)">
 
@@ -1903,7 +1986,8 @@ async function saveLog() {
   const reason=buildReasonText(logEntryStyle,logEntryCategory,logEntryTF,reasonNote);
   const sym=document.getElementById('symbol').value.trim().toUpperCase()||'未知品种';
   const c=lastCalc, id=await getNextId();
-  const trade={id,time:fmtNow(),symbol:sym,direction,entry:c.entry,stop:c.stop,leverage:c.lev,qty:+c.qty.toFixed(6),marginQty:+c.mQty.toFixed(4),positionSize:+c.posSize.toFixed(2),margin:+c.margin.toFixed(2),riskAmount:+c.riskAmt.toFixed(2),stopPct:+c.stopPct.toFixed(2),entryFee:+c.openFee.toFixed(4),feeRate:activeFeeRate,entryStyle:logEntryStyle,entryCategory:logEntryCategory,entryTimeframe:logEntryTF,reason,reasonNote,exitPlan:buildExitPlan(logEntryCategory),tp:parseFloat(document.getElementById('log-tp').value)||null,note:document.getElementById('log-note').value.trim(),closedMarginQty:0,closes:[],result:null,resultAmount:null,marginDeducted:true};
+  const trade={id,time:fmtNow(),symbol:sym,direction,entry:c.entry,stop:c.stop,leverage:c.lev,qty:+c.qty.toFixed(6),marginQty:+c.mQty.toFixed(4),positionSize:+c.posSize.toFixed(2),margin:+c.margin.toFixed(2),riskAmount:+c.riskAmt.toFixed(2),stopPct:+c.stopPct.toFixed(2),entryFee:+c.openFee.toFixed(4),feeRate:activeFeeRate,entryStyle:logEntryStyle,entryCategory:logEntryCategory,entryTimeframe:logEntryTF,reason,reasonNote,exitPlan:buildExitPlan(logEntryCategory),tp:parseFloat(document.getElementById('log-tp').value)||null,note:document.getElementById('log-note').value.trim(),closedMarginQty:0,closes:[],result:null,resultAmount:null,marginDeducted:true,checklist:pendingChecklist};
+  pendingChecklist = null;
   const trades=await readSymbolTrades(sym); trades.push(trade); await writeSymbolTrades(sym,trades);
   await applyBalanceDelta(-trade.margin); tradesCache=[...tradesCache,trade];
   refreshAccountPanel(); await populateSymbolList(); closeOverlay('log-overlay'); updateStorageIndicator(); markDirty();
@@ -2042,6 +2126,8 @@ function renderCard(t, all) {
   const res=closed?effectiveResult(t):null, amt=closed?effectiveAmount(t):null;
   const dirBadge=t.direction==='long'?'<span class="badge badge-long">做多 ▲</span>':'<span class="badge badge-short">做空 ▼</span>';
   const resBadge=!closed?`<span class="badge badge-open">持仓中${partial?' · 剩'+rem:''}</span>`:res==='profit'?`<span class="badge badge-profit">盈利 +$${Math.abs(amt).toFixed(2)}</span>`:res==='loss'?`<span class="badge badge-loss">亏损 -$${Math.abs(amt).toFixed(2)}</span>`:'<span class="badge badge-be">保本</span>';
+  const cl = t.checklist;
+  const clBadge = cl ? `<span class="cl-badge ${cl.checkedCount>=cl.totalItems?'pass':'partial'}">📋 ${cl.checkedCount}/${cl.totalItems}</span>` : '';
   const cardCls=!closed?t.direction:res==='profit'?'profit':res==='loss'?'loss':t.direction;
   const closesHTML=t.closes?.length?`<div class="closes-list">${t.closes.map((c,i)=>{const pnlVal=c.pnl??c.amount??0;const sign=pnlVal>=0?'+':'';const marginStr=c.margin!=null?`<br>保证金 +$${c.margin}`:'';return`<div class="close-item"><span class="ci-left">平仓${i+1}：${c.marginQty}手 @ ${c.exitPrice}<br>${c.time}</span><span class="ci-right ${c.result}">${sign}$${pnlVal.toFixed(2)}${marginStr}${c.note?' · '+c.note:''}</span></div>`;}).join('')}</div>`:'' ;
   let summaryHTML='';
@@ -2059,7 +2145,7 @@ function renderCard(t, all) {
     summaryHTML=`<div class="trade-summary"><div class="ts-item"><span class="ts-label">总盈亏</span><span class="ts-val ${pnlCls}">${pnlStr}</span></div><div class="ts-item"><span class="ts-label">R值</span><span class="ts-val ${rCls}">${rStr}</span></div><div class="ts-item"><span class="ts-label">风险金额</span><span class="ts-val neutral">$${riskAmt.toFixed(2)}</span></div><div class="ts-item"><span class="ts-label">均出价</span><span class="ts-val neutral">${avgExit}</span></div><div class="ts-item"><span class="ts-label">持仓时间</span><span class="ts-val neutral">${durStr}</span></div>${perCloseR?`<div class="ts-item" style="flex:1 1 100%"><span class="ts-label">分段 R 值</span><span class="ts-val neutral" style="font-size:10px">${perCloseR}</span></div>`:''}</div>`;
   }
   return `<div class="trade-card ${cardCls}">
-    <div class="trade-card-header"><div class="trade-meta"><span class="trade-id">#${num}</span><span class="badge badge-symbol">${t.symbol}</span>${dirBadge}</div>${resBadge}</div>
+    <div class="trade-card-header"><div class="trade-meta"><span class="trade-id">#${num}</span><span class="badge badge-symbol">${t.symbol}</span>${dirBadge}</div><div style="display:flex;gap:4px;align-items:center">${clBadge}${resBadge}</div></div>
     <div class="trade-details"><div class="detail-item"><label>入场价</label><span>${t.entry}</span></div><div class="detail-item"><label>止损价</label><span>${t.stop}</span></div><div class="detail-item"><label>止盈价</label><span>${t.tp||'—'}</span></div><div class="detail-item"><label>保证金量</label><span class="accent">${t.marginQty}</span></div><div class="detail-item"><label>已平仓量</label><span>${t.closedMarginQty||0}</span></div><div class="detail-item"><label>保证金</label><span>$${t.margin}</span></div></div>
     ${closesHTML}${summaryHTML}
     <div class="trade-reason">${renderReasonTags(t,true)}<span style="display:inline-block;margin-top:4px">💡 ${t.reasonNote||t.reason}</span>${t.note?'<br>📝 '+t.note:''}${t.updateNote&&!partial?'<br>🔍 '+t.updateNote:''}</div>
@@ -2118,6 +2204,213 @@ document.addEventListener('click', e => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
+// ── Checklist ──────────────────────────────────────────────────────────────
+const DEFAULT_CHECKLIST = [
+  { id:'cat_structure', label:'结构分析', items:[
+    { id:'str_1', label:'大级别方向已确认', required:true },
+    { id:'str_2', label:'入场位处于关键结构区域', required:true },
+    { id:'str_3', label:'已在图表标注关键价位', required:false },
+  ]},
+  { id:'cat_entry', label:'入场条件', items:[
+    { id:'ent_1', label:'入场信号清晰，非猜测', required:true },
+    { id:'ent_2', label:'R/R ≥ 1.5', required:true },
+    { id:'ent_3', label:'时间级别与策略计划一致', required:false },
+  ]},
+  { id:'cat_risk', label:'风险管理', items:[
+    { id:'risk_1', label:'止损有效（止损先于爆仓触发）', required:true },
+    { id:'risk_2', label:'风险比例在计划范围内', required:true },
+    { id:'risk_3', label:'同向持仓未超过上限', required:false },
+  ]},
+  { id:'cat_mindset', label:'交易状态', items:[
+    { id:'mind_1', label:'交易符合策略，非冲动入场', required:true },
+    { id:'mind_2', label:'心态平稳，无需急于扳回', required:false },
+  ]},
+];
+
+let clConfig = [];
+let clChecked = new Set();
+let clDraft   = [];
+let clEditing = false;
+let pendingChecklist = null;
+
+async function loadClConfig() {
+  const saved = await idbGet(STORE_DATA, 'checklist:config');
+  clConfig = saved ? saved : JSON.parse(JSON.stringify(DEFAULT_CHECKLIST));
+}
+async function saveClConfigToDB() {
+  await idbPut(STORE_DATA, 'checklist:config', clConfig);
+  markDirty();
+}
+
+async function openChecklistModal() {
+  if (!lastCalc) return;
+  await loadClConfig();
+  clChecked = new Set();
+  clEditing = false;
+  document.getElementById('cl-view-area').classList.remove('hidden');
+  document.getElementById('cl-edit-area').classList.remove('show');
+  const tb = document.getElementById('cl-edit-toggle-btn');
+  tb.textContent = '编辑清单'; tb.classList.remove('active');
+  clRenderView();
+  document.getElementById('checklist-overlay').classList.add('show');
+}
+
+function clRenderView() {
+  const container = document.getElementById('cl-items-container');
+  if (!clConfig.length) {
+    container.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-tertiary)">暂无清单条目<br><small style="font-size:11px">点击右上角「编辑清单」开始添加</small></div>';
+    clUpdateProgress(); return;
+  }
+  container.innerHTML = clConfig.map(cat => {
+    const reqCount = cat.items.filter(i => i.required).length;
+    const rows = cat.items.map(item => {
+      const chk = clChecked.has(item.id);
+      return `<label class="cl-item">
+        <input type="checkbox" onchange="clToggle('${item.id}')" ${chk ? 'checked' : ''}>
+        <span class="${item.required ? 'cl-req-pip' : 'cl-opt-pip'}"></span>
+        <span class="cl-item-text ${chk ? 'done' : ''}">${escHtml(item.label)}</span>
+      </label>`;
+    }).join('');
+    return `<div class="cl-category">
+      <div class="cl-cat-label-row">
+        <span class="cl-cat-label">${escHtml(cat.label)}</span>
+        <span class="cl-cat-req-count">${reqCount > 0 ? reqCount + ' 必填' : '全选填'}</span>
+      </div>
+      <div>${rows}</div>
+    </div>`;
+  }).join('');
+  clUpdateProgress();
+}
+
+async function openChecklistEditDirect() {
+  await loadClConfig();
+  clChecked = new Set();
+  clEditing = true;
+  clDraft = JSON.parse(JSON.stringify(clConfig));
+  document.getElementById('cl-view-area').classList.add('hidden');
+  document.getElementById('cl-edit-area').classList.add('show');
+  const tb = document.getElementById('cl-edit-toggle-btn');
+  tb.textContent = '← 返回'; tb.classList.add('active');
+  clRenderEdit();
+  document.getElementById('checklist-overlay').classList.add('show');
+}
+
+function clToggle(itemId) {
+  if (clChecked.has(itemId)) clChecked.delete(itemId); else clChecked.add(itemId);
+  clRenderView();
+}
+
+function clUpdateProgress() {
+  const allReq = clConfig.flatMap(c => c.items.filter(i => i.required));
+  const doneReq = allReq.filter(i => clChecked.has(i.id));
+  const allItems = clConfig.flatMap(c => c.items);
+  const doneAll = allItems.filter(i => clChecked.has(i.id));
+  const allGood = doneReq.length === allReq.length;
+  const btn = document.getElementById('cl-confirm-btn');
+  const prog = document.getElementById('cl-progress');
+  if (btn) btn.disabled = !allGood;
+  if (!prog) return;
+  if (allReq.length === 0) {
+    prog.innerHTML = '<span class="ok">✓ 无必填项，可直接开单</span>';
+    if (btn) btn.disabled = false;
+  } else if (allGood) {
+    prog.innerHTML = `<span class="ok">✓ 必填全部确认（${doneAll.length}/${allItems.length} 已勾）</span>`;
+  } else {
+    prog.innerHTML = `<span class="pending">必填 ${doneReq.length}/${allReq.length} · 已勾 ${doneAll.length}/${allItems.length}</span>`;
+  }
+}
+
+function confirmChecklist() {
+  const allReq = clConfig.flatMap(c => c.items.filter(i => i.required));
+  if (!allReq.every(i => clChecked.has(i.id))) return;
+  const allItems = clConfig.flatMap(c => c.items);
+  pendingChecklist = {
+    config: JSON.parse(JSON.stringify(clConfig)),
+    checked: [...clChecked],
+    checkedCount: allItems.filter(i => clChecked.has(i.id)).length,
+    totalItems: allItems.length,
+    requiredPassed: true,
+  };
+  closeOverlay('checklist-overlay');
+  openLogModal();
+}
+
+// ── Checklist Edit ─────────────────────────────────────────────────────────
+function toggleChecklistEdit() {
+  clEditing = !clEditing;
+  const ea = document.getElementById('cl-edit-area'), va = document.getElementById('cl-view-area');
+  const tb = document.getElementById('cl-edit-toggle-btn');
+  if (clEditing) {
+    clDraft = JSON.parse(JSON.stringify(clConfig));
+    ea.classList.add('show'); va.classList.add('hidden');
+    tb.textContent = '← 返回'; tb.classList.add('active');
+    clRenderEdit();
+  } else {
+    ea.classList.remove('show'); va.classList.remove('hidden');
+    tb.textContent = '编辑清单'; tb.classList.remove('active');
+    clRenderView();
+  }
+}
+
+function clCancelEdit() {
+  clEditing = false;
+  document.getElementById('cl-edit-area').classList.remove('show');
+  document.getElementById('cl-view-area').classList.remove('hidden');
+  const tb = document.getElementById('cl-edit-toggle-btn');
+  tb.textContent = '编辑清单'; tb.classList.remove('active');
+  clRenderView();
+}
+
+function clRenderEdit() {
+  document.getElementById('cl-edit-container').innerHTML = clDraft.map((cat, ci) => `
+    <div class="cl-edit-cat">
+      <div class="cl-edit-cat-hd">
+        <input class="cl-edit-cat-input" type="text" value="${escHtml(cat.label)}"
+          oninput="clDraft[${ci}].label=this.value" placeholder="分类名称">
+        <button class="btn-sm btn-delete" onclick="clRemoveCat(${ci})">删除分类</button>
+      </div>
+      ${cat.items.map((item, ii) => `
+        <div class="cl-edit-item-row">
+          <input class="cl-edit-item-input" type="text" value="${escHtml(item.label)}"
+            oninput="clDraft[${ci}].items[${ii}].label=this.value" placeholder="条目内容">
+          <button class="cl-req-toggle ${item.required ? 'req' : 'opt'}"
+            onclick="clToggleReq(${ci},${ii})"
+            title="${item.required ? '必填（点击改为选填）' : '选填（点击改为必填）'}">
+            ${item.required ? '必填' : '选填'}
+          </button>
+          <button class="btn-sm btn-delete" onclick="clRemoveItem(${ci},${ii})" style="flex-shrink:0">×</button>
+        </div>`).join('')}
+      <button class="cl-add-item-btn" onclick="clAddItem(${ci})">＋ 添加条目</button>
+    </div>`).join('');
+}
+
+function clAddCategory() {
+  clDraft.push({ id:'cat_'+Date.now(), label:'新分类', items:[] });
+  clRenderEdit();
+}
+function clRemoveCat(ci) {
+  if (!confirm(`删除分类「${clDraft[ci].label}」及其所有条目？`)) return;
+  clDraft.splice(ci, 1); clRenderEdit();
+}
+function clAddItem(ci) {
+  clDraft[ci].items.push({ id:'item_'+Date.now(), label:'', required:true });
+  clRenderEdit();
+}
+function clRemoveItem(ci, ii) { clDraft[ci].items.splice(ii, 1); clRenderEdit(); }
+function clToggleReq(ci, ii) { clDraft[ci].items[ii].required = !clDraft[ci].items[ii].required; clRenderEdit(); }
+
+async function clSaveEdit() {
+  // Trim and clean
+  for (const cat of clDraft) {
+    cat.label = cat.label.trim() || '未命名分类';
+    cat.items = cat.items.filter(i => i.label.trim());
+    for (const i of cat.items) i.label = i.label.trim();
+  }
+  clConfig = clDraft.filter(c => c.items.length > 0 || c.label !== '新分类');
+  await saveClConfigToDB();
+  clCancelEdit();
+}
+
 // ── Cloud Sync (GitHub Gist) ──────────────────────────────────────────────
 let syncToken = localStorage.getItem('syncToken') || '';
 let syncBinId = localStorage.getItem('syncBinId')  || '';
