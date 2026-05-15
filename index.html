@@ -434,6 +434,12 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
 .cl-add-cat-btn { width:100%; padding:9px; border:1px dashed rgba(255,255,255,0.1); border-radius:var(--radius-sm); background:transparent; color:var(--text-tertiary); font-size:13px; cursor:pointer; margin-top:6px; transition:all 0.15s; font-family:inherit; }
 .cl-add-cat-btn:hover { border-color:var(--green); color:var(--green); }
 
+/* violated parent (checked but no child selected) */
+.cl-item.cl-violated { background:rgba(255,159,10,0.06); border-radius:6px; }
+.cl-item.cl-violated .cl-item-text { color:var(--orange); }
+.cl-kids-hint { font-size:10px; color:var(--text-tertiary); margin-left:4px; flex-shrink:0; }
+.cl-kids-hint.warn { color:var(--orange); }
+
 /* badge in trade card */
 .cl-badge { display:inline-flex; align-items:center; gap:3px; padding:2px 7px; border-radius:4px; font-size:10px; font-weight:600; }
 .cl-badge.pass { background:rgba(48,209,88,0.1); color:var(--green); }
@@ -571,9 +577,8 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
         </div>
 
         <div class="action-btns">
-          <button class="btn-log btn-disabled" id="btn-log" onclick="openChecklistModal()">+ 记录此交易</button>
+          <button class="btn-log" id="btn-checklist-open" onclick="openChecklistSmart()" style="background:var(--bg-elevated);border:1px solid var(--border);color:var(--text-secondary);">📋 开单自查</button>
           <button class="btn-journal" onclick="openJournal()">查看日志</button>
-          <button class="btn-journal" onclick="openChecklistEditDirect()" title="编辑开单自查清单" style="flex:0;padding:10px 12px;">📋</button>
         </div>
       </div>
     </div>
@@ -1218,7 +1223,7 @@ async function switchProfile(pid) {
 
   // Reset calculator
   lastCalc = null;
-  document.getElementById('btn-log').classList.add('btn-disabled');
+  
   hideLiqCheck();
   ['r-risk','r-pct','r-qty','r-size','r-margin','r-fee'].forEach(id => setRV(id, '——', true));
   const brkRowReset = document.getElementById('r-risk-breakdown-row');
@@ -1704,7 +1709,7 @@ function renderLiqCheck(entry, stop, lev, dir, margin, posSize) {
     document.getElementById('lw-safelev').textContent = safeLev+'x（含 '+(LIQ_BUFFER*100).toFixed(0)+'% 缓冲）';
     document.getElementById('lw-safemargin').textContent = '$'+safeMargin.toFixed(2);
     document.getElementById('lw-safelev-label').textContent = `${safeLev}x 时所需保证金`;
-    document.getElementById('btn-log').classList.add('btn-disabled');
+    
   } else {
     warnEl.style.display = 'none'; safeEl.style.display = 'block';
     document.getElementById('liq-safe-gap').textContent = gapPct.toFixed(2)+'%';
@@ -1773,7 +1778,6 @@ function calculate() {
   lastCalc = { entry, stop, bal, rPct, lev, riskAmt, stopPct, qty, posSize, margin, mQty, openFee, priceLoss, totalFeeAtStop, totalEquity, usedMargin };
   renderLiqCheck(entry, stop, lev, direction, margin, posSize);
   const { stopValid } = checkLiquidation(entry, stop, lev, direction);
-  if (stopValid) document.getElementById('btn-log').classList.remove('btn-disabled');
   updateFloatingBalance(entry);
 }
 
@@ -2263,24 +2267,34 @@ async function saveClConfigToDB() {
 }
 
 // ── View Mode ──────────────────────────────────────────────────────────────
-async function openChecklistModal() {
-  if (!lastCalc) return;
+// Unified entry: if lastCalc exists → view mode for recording; else → edit mode
+async function openChecklistSmart() {
   await loadClConfig();
   clChecked = new Set();
-  clEditing = false;
-  document.getElementById('cl-view-area').classList.remove('hidden');
-  document.getElementById('cl-edit-area').classList.remove('show');
+  clSelectedId = null;
   const tb = document.getElementById('cl-edit-toggle-btn');
-  tb.textContent = '编辑清单'; tb.classList.remove('active');
-  clRenderView();
+  if (lastCalc) {
+    clEditing = false;
+    document.getElementById('cl-view-area').classList.remove('hidden');
+    document.getElementById('cl-edit-area').classList.remove('show');
+    tb.textContent = '编辑清单'; tb.classList.remove('active');
+    clRenderView();
+  } else {
+    clEditing = true;
+    clDraft = JSON.parse(JSON.stringify(clConfig));
+    document.getElementById('cl-view-area').classList.add('hidden');
+    document.getElementById('cl-edit-area').classList.add('show');
+    tb.textContent = '← 返回'; tb.classList.add('active');
+    clRenderEdit();
+  }
   document.getElementById('checklist-overlay').classList.add('show');
 }
 
+// Keep for compatibility (called internally)
+async function openChecklistModal() { await openChecklistSmart(); }
 async function openChecklistEditDirect() {
   await loadClConfig();
-  clChecked = new Set();
-  clEditing = true;
-  clSelectedId = null;
+  clEditing = true; clSelectedId = null;
   clDraft = JSON.parse(JSON.stringify(clConfig));
   document.getElementById('cl-view-area').classList.add('hidden');
   document.getElementById('cl-edit-area').classList.add('show');
@@ -2288,6 +2302,40 @@ async function openChecklistEditDirect() {
   tb.textContent = '← 返回'; tb.classList.add('active');
   clRenderEdit();
   document.getElementById('checklist-overlay').classList.add('show');
+}
+
+// ── Validation helpers ─────────────────────────────────────────────────────
+function clImmediateChildren(nodes, idx) {
+  const children = [];
+  const pd = nodes[idx].depth;
+  for (let j = idx + 1; j < nodes.length; j++) {
+    if (nodes[j].depth <= pd) break;
+    if (nodes[j].depth === pd + 1) children.push(nodes[j]);
+  }
+  return children;
+}
+
+function clHasChildren(nodes, idx) {
+  return idx + 1 < nodes.length && nodes[idx + 1].depth > nodes[idx].depth;
+}
+
+function clValidateAll() {
+  const items = clConfig.filter(n => n.depth > 0);
+  // 1. required items
+  const requiredTotal = items.filter(n => n.required).length;
+  const requiredDone  = items.filter(n => n.required && clChecked.has(n.id)).length;
+  // 2. parent-child violations: checked parent with children but no child checked
+  const violations = [];
+  for (let i = 0; i < clConfig.length; i++) {
+    const node = clConfig[i];
+    if (node.depth === 0) continue;
+    if (!clChecked.has(node.id)) continue;
+    if (!clHasChildren(clConfig, i)) continue;
+    const kids = clImmediateChildren(clConfig, i);
+    if (!kids.some(k => clChecked.has(k.id))) violations.push(node);
+  }
+  const ok = requiredDone === requiredTotal && violations.length === 0;
+  return { ok, requiredDone, requiredTotal, violations };
 }
 
 function clRenderView() {
@@ -2310,12 +2358,19 @@ function clRenderView() {
       </div>`;
     } else {
       const chk = clChecked.has(node.id);
+      const hasKids = clHasChildren(clConfig, i);
+      const kids = hasKids ? clImmediateChildren(clConfig, i) : [];
+      const violated = chk && hasKids && !kids.some(k => clChecked.has(k.id));
       const indent = (node.depth - 1) * 22;
       const fsize = Math.max(11, 14 - (node.depth - 1)) + 'px';
-      html += `<label class="cl-item" style="padding-left:${8 + indent}px">
+      const kidsHint = hasKids
+        ? `<span class="cl-kids-hint ${violated ? 'warn' : ''}">${violated ? '⚠ 需选一个↓' : '选一个↓'}</span>`
+        : '';
+      html += `<label class="cl-item ${violated ? 'cl-violated' : ''}" style="padding-left:${8 + indent}px">
         <input type="checkbox" onchange="clToggle('${node.id}')" ${chk ? 'checked' : ''}>
         <span class="${node.required ? 'cl-req-pip' : 'cl-opt-pip'}"></span>
         <span class="cl-item-text ${chk ? 'done' : ''}" style="font-size:${fsize}">${escHtml(node.label)}</span>
+        ${kidsHint}
       </label>`;
     }
   }
@@ -2329,28 +2384,30 @@ function clToggle(itemId) {
 }
 
 function clUpdateProgress() {
-  const allReq  = clConfig.filter(n => n.depth > 0 && n.required);
-  const doneReq = allReq.filter(n => clChecked.has(n.id));
+  const { ok, requiredDone, requiredTotal, violations } = clValidateAll();
   const allItems = clConfig.filter(n => n.depth > 0);
-  const doneAll  = allItems.filter(n => clChecked.has(n.id));
-  const allGood  = doneReq.length === allReq.length;
+  const doneAll = allItems.filter(n => clChecked.has(n.id)).length;
   const btn = document.getElementById('cl-confirm-btn');
   const prog = document.getElementById('cl-progress');
-  if (btn) btn.disabled = !allGood;
+  // Disable confirm if no calc or validation fails
+  if (btn) btn.disabled = !lastCalc || !ok;
   if (!prog) return;
-  if (allReq.length === 0) {
-    prog.innerHTML = '<span class="ok">✓ 无必填项，可直接开单</span>';
-    if (btn) btn.disabled = false;
-  } else if (allGood) {
-    prog.innerHTML = `<span class="ok">✓ 必填全部确认（${doneAll.length}/${allItems.length} 已勾）</span>`;
+  if (!lastCalc) {
+    prog.innerHTML = '<span class="pending">先完成仓位计算再开单</span>'; return;
+  }
+  if (ok) {
+    prog.innerHTML = `<span class="ok">✓ 所有条件满足（${doneAll}/${allItems.length} 已勾）</span>`;
   } else {
-    prog.innerHTML = `<span class="pending">必填 ${doneReq.length}/${allReq.length} · 已勾 ${doneAll.length}/${allItems.length}</span>`;
+    const parts = [];
+    if (requiredDone < requiredTotal) parts.push(`必填 ${requiredDone}/${requiredTotal}`);
+    if (violations.length > 0) parts.push(`子项需补选 ${violations.length} 处`);
+    prog.innerHTML = `<span class="pending">${parts.join(' · ')}</span>`;
   }
 }
 
 function confirmChecklist() {
-  const allReq = clConfig.filter(n => n.depth > 0 && n.required);
-  if (!allReq.every(n => clChecked.has(n.id))) return;
+  const { ok } = clValidateAll();
+  if (!ok || !lastCalc) return;
   const allItems = clConfig.filter(n => n.depth > 0);
   pendingChecklist = {
     config: JSON.parse(JSON.stringify(clConfig)),
@@ -2362,6 +2419,7 @@ function confirmChecklist() {
   closeOverlay('checklist-overlay');
   openLogModal();
 }
+
 
 // ── Edit Mode ──────────────────────────────────────────────────────────────
 function toggleChecklistEdit() {
