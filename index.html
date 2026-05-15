@@ -410,20 +410,28 @@ input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(10,132,255
 .cl-confirm-btn:hover:not(:disabled) { opacity:0.85; }
 .cl-confirm-btn:disabled { background:var(--bg-elevated); color:var(--text-tertiary); cursor:not-allowed; }
 
-/* edit mode */
-.cl-edit-cat { background:var(--bg-elevated); border-radius:var(--radius-sm); padding:12px; margin-bottom:8px; border:1px solid var(--border); }
-.cl-edit-cat-hd { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
-.cl-edit-cat-input { flex:1; padding:7px 10px; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:13px; font-weight:600; outline:none; font-family:inherit; }
-.cl-edit-cat-input:focus { border-color:var(--accent); }
-.cl-edit-item-row { display:flex; align-items:center; gap:6px; margin-bottom:5px; }
-.cl-edit-item-input { flex:1; padding:7px 10px; background:var(--bg-input); border:1px solid var(--border); border-radius:6px; color:var(--text-primary); font-size:13px; outline:none; font-family:inherit; }
-.cl-edit-item-input:focus { border-color:var(--accent); }
-.cl-req-toggle { padding:4px 9px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer; border:none; font-family:inherit; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
+/* edit mode - flat list with depth */
+.cl-edit-row { display:flex; align-items:center; gap:6px; padding:7px 8px; border-radius:8px; cursor:pointer; transition:background 0.12s; margin-bottom:2px; }
+.cl-edit-row:hover { background:rgba(255,255,255,0.03); }
+.cl-edit-row.sel { background:rgba(10,132,255,0.08); border-radius:8px; }
+.cl-row-cat { border-bottom:1px solid rgba(255,255,255,0.05); margin-bottom:3px; padding-bottom:8px; border-radius:0; }
+.cl-row-cat.sel { background:rgba(10,132,255,0.06); border-radius:8px; border-bottom-color:transparent; }
+.cl-row-icon { font-size:10px; color:var(--text-tertiary); flex-shrink:0; width:12px; }
+.cl-edit-input { flex:1; padding:4px 6px; background:transparent; border:none; color:var(--text-primary); font-size:14px; outline:none; font-family:inherit; min-width:0; }
+.cl-edit-input:focus { background:rgba(255,255,255,0.04); border-radius:4px; }
+.cl-cat-input { font-size:13px; font-weight:700; color:var(--text-secondary); letter-spacing:0.2px; }
+.cl-ctrl-bar { display:none; gap:3px; align-items:center; flex-shrink:0; }
+.cl-edit-row.sel .cl-ctrl-bar { display:flex; }
+.cl-ctrl-btn { width:24px; height:24px; border:none; border-radius:4px; background:rgba(255,255,255,0.08); color:var(--text-secondary); font-size:12px; cursor:pointer; transition:all 0.12s; display:flex; align-items:center; justify-content:center; padding:0; font-family:inherit; flex-shrink:0; }
+.cl-ctrl-btn:hover:not(:disabled) { background:rgba(255,255,255,0.15); color:var(--text-primary); }
+.cl-ctrl-btn:disabled { opacity:0.25; cursor:not-allowed; }
+.cl-ctrl-btn.danger:hover:not(:disabled) { background:rgba(255,69,58,0.18); color:var(--red); }
+.cl-req-toggle { padding:2px 7px; border-radius:4px; font-size:10px; font-weight:700; cursor:pointer; border:none; font-family:inherit; transition:all 0.15s; white-space:nowrap; flex-shrink:0; }
 .cl-req-toggle.req  { background:rgba(255,69,58,0.15); color:var(--red); }
 .cl-req-toggle.opt  { background:rgba(255,255,255,0.06); color:var(--text-tertiary); }
-.cl-add-item-btn { width:100%; padding:6px; border:1px dashed rgba(255,255,255,0.1); border-radius:6px; background:transparent; color:var(--text-tertiary); font-size:12px; cursor:pointer; margin-top:4px; transition:all 0.15s; font-family:inherit; }
-.cl-add-item-btn:hover { border-color:var(--accent); color:var(--accent); }
-.cl-add-cat-btn { width:100%; padding:9px; border:1px dashed rgba(255,255,255,0.1); border-radius:var(--radius-sm); background:transparent; color:var(--text-tertiary); font-size:13px; cursor:pointer; margin-top:4px; transition:all 0.15s; font-family:inherit; }
+.cl-add-here-btn { padding:2px 8px; border:1px solid rgba(255,255,255,0.08); border-radius:4px; background:transparent; color:var(--text-tertiary); font-size:12px; cursor:pointer; transition:all 0.12s; flex-shrink:0; font-family:inherit; }
+.cl-add-here-btn:hover { border-color:var(--accent); color:var(--accent); }
+.cl-add-cat-btn { width:100%; padding:9px; border:1px dashed rgba(255,255,255,0.1); border-radius:var(--radius-sm); background:transparent; color:var(--text-tertiary); font-size:13px; cursor:pointer; margin-top:6px; transition:all 0.15s; font-family:inherit; }
 .cl-add-cat-btn:hover { border-color:var(--green); color:var(--green); }
 
 /* badge in trade card */
@@ -2204,44 +2212,57 @@ document.addEventListener('click', e => {
 });
 
 // ── Init ───────────────────────────────────────────────────────────────────
-// ── Checklist ──────────────────────────────────────────────────────────────
+// ── Checklist (flat array, unlimited depth) ────────────────────────────────
+// depth 0 = category header (not checkable, has ＋ button, ↑↓ moves whole block)
+// depth ≥ 1 = checkable item (←→ indent freely, ↑↓ free move across boundaries)
+
 const DEFAULT_CHECKLIST = [
-  { id:'cat_structure', label:'结构分析', items:[
-    { id:'str_1', label:'大级别方向已确认', required:true },
-    { id:'str_2', label:'入场位处于关键结构区域', required:true },
-    { id:'str_3', label:'已在图表标注关键价位', required:false },
-  ]},
-  { id:'cat_entry', label:'入场条件', items:[
-    { id:'ent_1', label:'入场信号清晰，非猜测', required:true },
-    { id:'ent_2', label:'R/R ≥ 1.5', required:true },
-    { id:'ent_3', label:'时间级别与策略计划一致', required:false },
-  ]},
-  { id:'cat_risk', label:'风险管理', items:[
-    { id:'risk_1', label:'止损有效（止损先于爆仓触发）', required:true },
-    { id:'risk_2', label:'风险比例在计划范围内', required:true },
-    { id:'risk_3', label:'同向持仓未超过上限', required:false },
-  ]},
-  { id:'cat_mindset', label:'交易状态', items:[
-    { id:'mind_1', label:'交易符合策略，非冲动入场', required:true },
-    { id:'mind_2', label:'心态平稳，无需急于扳回', required:false },
-  ]},
+  { id:'cat_structure', depth:0, label:'结构分析' },
+  { id:'str_1', depth:1, label:'大级别方向已确认', required:true },
+  { id:'str_2', depth:1, label:'入场位处于关键结构区域', required:true },
+  { id:'str_3', depth:2, label:'已在图表标注关键价位', required:false },
+  { id:'cat_entry', depth:0, label:'入场条件' },
+  { id:'ent_1', depth:1, label:'入场信号清晰，非猜测', required:true },
+  { id:'ent_2', depth:1, label:'R/R ≥ 1.5', required:true },
+  { id:'ent_3', depth:2, label:'时间级别与策略计划一致', required:false },
+  { id:'cat_risk', depth:0, label:'风险管理' },
+  { id:'risk_1', depth:1, label:'止损有效（止损先于爆仓触发）', required:true },
+  { id:'risk_2', depth:1, label:'风险比例在计划范围内', required:true },
+  { id:'risk_3', depth:2, label:'同向持仓未超过上限', required:false },
+  { id:'cat_mindset', depth:0, label:'交易状态' },
+  { id:'mind_1', depth:1, label:'交易符合策略，非冲动入场', required:true },
+  { id:'mind_2', depth:2, label:'心态平稳，无需急于扳回', required:false },
 ];
 
-let clConfig = [];
-let clChecked = new Set();
-let clDraft   = [];
-let clEditing = false;
+let clConfig     = [];
+let clChecked    = new Set();
+let clDraft      = [];
+let clEditing    = false;
+let clSelectedId = null;
 let pendingChecklist = null;
 
 async function loadClConfig() {
   const saved = await idbGet(STORE_DATA, 'checklist:config');
-  clConfig = saved ? saved : JSON.parse(JSON.stringify(DEFAULT_CHECKLIST));
+  if (saved && Array.isArray(saved) && saved.length && saved[0].items !== undefined) {
+    // Migrate old tree format → flat
+    const flat = [];
+    for (const cat of saved) {
+      flat.push({ id: cat.id, depth: 0, label: cat.label });
+      for (const item of (cat.items || []))
+        flat.push({ id: item.id, depth: 1, label: item.label, required: item.required });
+    }
+    clConfig = flat;
+    await idbPut(STORE_DATA, 'checklist:config', clConfig); // save migrated
+  } else {
+    clConfig = saved || JSON.parse(JSON.stringify(DEFAULT_CHECKLIST));
+  }
 }
 async function saveClConfigToDB() {
   await idbPut(STORE_DATA, 'checklist:config', clConfig);
   markDirty();
 }
 
+// ── View Mode ──────────────────────────────────────────────────────────────
 async function openChecklistModal() {
   if (!lastCalc) return;
   await loadClConfig();
@@ -2255,37 +2276,11 @@ async function openChecklistModal() {
   document.getElementById('checklist-overlay').classList.add('show');
 }
 
-function clRenderView() {
-  const container = document.getElementById('cl-items-container');
-  if (!clConfig.length) {
-    container.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-tertiary)">暂无清单条目<br><small style="font-size:11px">点击右上角「编辑清单」开始添加</small></div>';
-    clUpdateProgress(); return;
-  }
-  container.innerHTML = clConfig.map(cat => {
-    const reqCount = cat.items.filter(i => i.required).length;
-    const rows = cat.items.map(item => {
-      const chk = clChecked.has(item.id);
-      return `<label class="cl-item">
-        <input type="checkbox" onchange="clToggle('${item.id}')" ${chk ? 'checked' : ''}>
-        <span class="${item.required ? 'cl-req-pip' : 'cl-opt-pip'}"></span>
-        <span class="cl-item-text ${chk ? 'done' : ''}">${escHtml(item.label)}</span>
-      </label>`;
-    }).join('');
-    return `<div class="cl-category">
-      <div class="cl-cat-label-row">
-        <span class="cl-cat-label">${escHtml(cat.label)}</span>
-        <span class="cl-cat-req-count">${reqCount > 0 ? reqCount + ' 必填' : '全选填'}</span>
-      </div>
-      <div>${rows}</div>
-    </div>`;
-  }).join('');
-  clUpdateProgress();
-}
-
 async function openChecklistEditDirect() {
   await loadClConfig();
   clChecked = new Set();
   clEditing = true;
+  clSelectedId = null;
   clDraft = JSON.parse(JSON.stringify(clConfig));
   document.getElementById('cl-view-area').classList.add('hidden');
   document.getElementById('cl-edit-area').classList.add('show');
@@ -2295,17 +2290,50 @@ async function openChecklistEditDirect() {
   document.getElementById('checklist-overlay').classList.add('show');
 }
 
+function clRenderView() {
+  const container = document.getElementById('cl-items-container');
+  const checkable = clConfig.filter(n => n.depth > 0);
+  if (!checkable.length) {
+    container.innerHTML = '<div style="text-align:center;padding:28px;color:var(--text-tertiary)">暂无清单条目<br><small style="font-size:11px">点击右上角「编辑清单」添加</small></div>';
+    clUpdateProgress(); return;
+  }
+  let html = '';
+  for (let i = 0; i < clConfig.length; i++) {
+    const node = clConfig[i];
+    if (node.depth === 0) {
+      let reqCount = 0;
+      for (let j = i + 1; j < clConfig.length && clConfig[j].depth > 0; j++)
+        if (clConfig[j].required) reqCount++;
+      html += `<div class="cl-cat-label-row">
+        <span class="cl-cat-label">${escHtml(node.label)}</span>
+        ${reqCount > 0 ? `<span class="cl-cat-req-count">${reqCount} 必填</span>` : ''}
+      </div>`;
+    } else {
+      const chk = clChecked.has(node.id);
+      const indent = (node.depth - 1) * 22;
+      const fsize = Math.max(11, 14 - (node.depth - 1)) + 'px';
+      html += `<label class="cl-item" style="padding-left:${8 + indent}px">
+        <input type="checkbox" onchange="clToggle('${node.id}')" ${chk ? 'checked' : ''}>
+        <span class="${node.required ? 'cl-req-pip' : 'cl-opt-pip'}"></span>
+        <span class="cl-item-text ${chk ? 'done' : ''}" style="font-size:${fsize}">${escHtml(node.label)}</span>
+      </label>`;
+    }
+  }
+  container.innerHTML = html;
+  clUpdateProgress();
+}
+
 function clToggle(itemId) {
   if (clChecked.has(itemId)) clChecked.delete(itemId); else clChecked.add(itemId);
   clRenderView();
 }
 
 function clUpdateProgress() {
-  const allReq = clConfig.flatMap(c => c.items.filter(i => i.required));
-  const doneReq = allReq.filter(i => clChecked.has(i.id));
-  const allItems = clConfig.flatMap(c => c.items);
-  const doneAll = allItems.filter(i => clChecked.has(i.id));
-  const allGood = doneReq.length === allReq.length;
+  const allReq  = clConfig.filter(n => n.depth > 0 && n.required);
+  const doneReq = allReq.filter(n => clChecked.has(n.id));
+  const allItems = clConfig.filter(n => n.depth > 0);
+  const doneAll  = allItems.filter(n => clChecked.has(n.id));
+  const allGood  = doneReq.length === allReq.length;
   const btn = document.getElementById('cl-confirm-btn');
   const prog = document.getElementById('cl-progress');
   if (btn) btn.disabled = !allGood;
@@ -2321,13 +2349,13 @@ function clUpdateProgress() {
 }
 
 function confirmChecklist() {
-  const allReq = clConfig.flatMap(c => c.items.filter(i => i.required));
-  if (!allReq.every(i => clChecked.has(i.id))) return;
-  const allItems = clConfig.flatMap(c => c.items);
+  const allReq = clConfig.filter(n => n.depth > 0 && n.required);
+  if (!allReq.every(n => clChecked.has(n.id))) return;
+  const allItems = clConfig.filter(n => n.depth > 0);
   pendingChecklist = {
     config: JSON.parse(JSON.stringify(clConfig)),
     checked: [...clChecked],
-    checkedCount: allItems.filter(i => clChecked.has(i.id)).length,
+    checkedCount: allItems.filter(n => clChecked.has(n.id)).length,
     totalItems: allItems.length,
     requiredPassed: true,
   };
@@ -2335,13 +2363,14 @@ function confirmChecklist() {
   openLogModal();
 }
 
-// ── Checklist Edit ─────────────────────────────────────────────────────────
+// ── Edit Mode ──────────────────────────────────────────────────────────────
 function toggleChecklistEdit() {
   clEditing = !clEditing;
   const ea = document.getElementById('cl-edit-area'), va = document.getElementById('cl-view-area');
   const tb = document.getElementById('cl-edit-toggle-btn');
   if (clEditing) {
     clDraft = JSON.parse(JSON.stringify(clConfig));
+    clSelectedId = null;
     ea.classList.add('show'); va.classList.add('hidden');
     tb.textContent = '← 返回'; tb.classList.add('active');
     clRenderEdit();
@@ -2353,7 +2382,7 @@ function toggleChecklistEdit() {
 }
 
 function clCancelEdit() {
-  clEditing = false;
+  clEditing = false; clSelectedId = null;
   document.getElementById('cl-edit-area').classList.remove('show');
   document.getElementById('cl-view-area').classList.remove('hidden');
   const tb = document.getElementById('cl-edit-toggle-btn');
@@ -2361,52 +2390,154 @@ function clCancelEdit() {
   clRenderView();
 }
 
+// CSS-only selection — no re-render, input keeps focus
+function clSelect(nodeId) {
+  clSelectedId = clSelectedId === nodeId ? null : nodeId;
+  document.querySelectorAll('.cl-edit-row').forEach(row => {
+    row.classList.toggle('sel', row.dataset.id === clSelectedId);
+  });
+}
+
+function clUpdateLabel(nodeId, val) {
+  const node = clDraft.find(n => n.id === nodeId);
+  if (node) node.label = val;
+}
+
 function clRenderEdit() {
-  document.getElementById('cl-edit-container').innerHTML = clDraft.map((cat, ci) => `
-    <div class="cl-edit-cat">
-      <div class="cl-edit-cat-hd">
-        <input class="cl-edit-cat-input" type="text" value="${escHtml(cat.label)}"
-          oninput="clDraft[${ci}].label=this.value" placeholder="分类名称">
-        <button class="btn-sm btn-delete" onclick="clRemoveCat(${ci})">删除分类</button>
-      </div>
-      ${cat.items.map((item, ii) => `
-        <div class="cl-edit-item-row">
-          <input class="cl-edit-item-input" type="text" value="${escHtml(item.label)}"
-            oninput="clDraft[${ci}].items[${ii}].label=this.value" placeholder="条目内容">
-          <button class="cl-req-toggle ${item.required ? 'req' : 'opt'}"
-            onclick="clToggleReq(${ci},${ii})"
-            title="${item.required ? '必填（点击改为选填）' : '选填（点击改为必填）'}">
-            ${item.required ? '必填' : '选填'}
+  const container = document.getElementById('cl-edit-container');
+  if (!clDraft.length) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-tertiary)">暂无内容，点下方「添加分类」</div>';
+    return;
+  }
+  let html = '';
+  for (let i = 0; i < clDraft.length; i++) {
+    const node = clDraft[i];
+    const isSel = clSelectedId === node.id;
+    const pl = node.depth * 20;
+    if (node.depth === 0) {
+      const canUp   = i > 0;
+      const canDown = clBlockEnd(i) < clDraft.length;
+      html += `<div class="cl-edit-row cl-row-cat${isSel?' sel':''}" data-id="${node.id}" onclick="clSelect('${node.id}')">
+        <span class="cl-row-icon">▸</span>
+        <input class="cl-edit-input cl-cat-input" type="text" value="${escHtml(node.label)}" placeholder="分类名称"
+          oninput="clUpdateLabel('${node.id}',this.value)"
+          onclick="event.stopPropagation();clSelect('${node.id}')">
+        <button class="cl-add-here-btn" onclick="event.stopPropagation();clAddItem(${i})" title="添加条目">＋</button>
+        <div class="cl-ctrl-bar">
+          <button class="cl-ctrl-btn" onclick="event.stopPropagation();clMoveUp(${i})" ${!canUp?'disabled':''} title="上移">↑</button>
+          <button class="cl-ctrl-btn" onclick="event.stopPropagation();clMoveDown(${i})" ${!canDown?'disabled':''} title="下移">↓</button>
+          <button class="cl-ctrl-btn danger" onclick="event.stopPropagation();clDeleteNode(${i})" title="删除分类">×</button>
+        </div>
+      </div>`;
+    } else {
+      const prevDepth  = i > 0 ? clDraft[i-1].depth : 0;
+      const canIndent  = node.depth <= prevDepth; // no depth limit, only can't skip levels
+      const canUnindent = node.depth > 1;
+      const canUp   = i > 0;
+      const canDown = i < clDraft.length - 1;
+      const pip = node.required
+        ? `<span class="cl-req-pip" style="flex-shrink:0"></span>`
+        : `<span class="cl-opt-pip" style="flex-shrink:0;width:5px;height:5px;border-radius:50%;border:1px solid rgba(255,255,255,0.2)"></span>`;
+      html += `<div class="cl-edit-row cl-row-item${isSel?' sel':''}" data-id="${node.id}"
+          style="padding-left:${8+pl}px" onclick="clSelect('${node.id}')">
+        ${pip}
+        <input class="cl-edit-input" type="text" value="${escHtml(node.label)}" placeholder="条目内容"
+          oninput="clUpdateLabel('${node.id}',this.value)"
+          onclick="event.stopPropagation();clSelect('${node.id}')">
+        <div class="cl-ctrl-bar">
+          <button class="cl-ctrl-btn" onclick="event.stopPropagation();clUnindent(${i})" ${!canUnindent?'disabled':''} title="←减少缩进">←</button>
+          <button class="cl-ctrl-btn" onclick="event.stopPropagation();clIndent(${i})" ${!canIndent?'disabled':''} title="→增加缩进">→</button>
+          <button class="cl-ctrl-btn" onclick="event.stopPropagation();clMoveUp(${i})" ${!canUp?'disabled':''} title="↑上移">↑</button>
+          <button class="cl-ctrl-btn" onclick="event.stopPropagation();clMoveDown(${i})" ${!canDown?'disabled':''} title="↓下移">↓</button>
+          <button class="cl-req-toggle ${node.required?'req':'opt'}" onclick="event.stopPropagation();clToggleReq(${i})">
+            ${node.required ? '必填' : '选填'}
           </button>
-          <button class="btn-sm btn-delete" onclick="clRemoveItem(${ci},${ii})" style="flex-shrink:0">×</button>
-        </div>`).join('')}
-      <button class="cl-add-item-btn" onclick="clAddItem(${ci})">＋ 添加条目</button>
-    </div>`).join('');
+          <button class="cl-ctrl-btn danger" onclick="event.stopPropagation();clDeleteNode(${i})" title="删除">×</button>
+        </div>
+      </div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+
+// ── Edit Operations ────────────────────────────────────────────────────────
+function clBlockEnd(catIdx) {
+  let end = catIdx + 1;
+  while (end < clDraft.length && clDraft[end].depth > 0) end++;
+  return end;
 }
 
 function clAddCategory() {
-  clDraft.push({ id:'cat_'+Date.now(), label:'新分类', items:[] });
-  clRenderEdit();
+  const n = { id:'cat_'+Date.now(), depth:0, label:'新分类' };
+  clDraft.push(n); clSelectedId = n.id; clRenderEdit();
 }
-function clRemoveCat(ci) {
-  if (!confirm(`删除分类「${clDraft[ci].label}」及其所有条目？`)) return;
-  clDraft.splice(ci, 1); clRenderEdit();
+
+function clAddItem(catIdx) {
+  const insertAt = clBlockEnd(catIdx);
+  const n = { id:'item_'+Date.now(), depth:1, label:'', required:true };
+  clDraft.splice(insertAt, 0, n); clSelectedId = n.id; clRenderEdit();
 }
-function clAddItem(ci) {
-  clDraft[ci].items.push({ id:'item_'+Date.now(), label:'', required:true });
-  clRenderEdit();
+
+function clDeleteNode(i) {
+  const node = clDraft[i];
+  const lbl = node.label || (node.depth === 0 ? '此分类' : '此条目');
+  const msg = node.depth === 0 ? `删除分类「${lbl}」及其所有条目？` : `删除「${lbl}」？`;
+  if (!confirm(msg)) return;
+  if (node.depth === 0) clDraft.splice(i, clBlockEnd(i) - i);
+  else clDraft.splice(i, 1);
+  clSelectedId = null; clRenderEdit();
 }
-function clRemoveItem(ci, ii) { clDraft[ci].items.splice(ii, 1); clRenderEdit(); }
-function clToggleReq(ci, ii) { clDraft[ci].items[ii].required = !clDraft[ci].items[ii].required; clRenderEdit(); }
+
+function clMoveUp(i) {
+  if (i <= 0) return;
+  const node = clDraft[i];
+  if (node.depth === 0) {
+    const len = clBlockEnd(i) - i;
+    const block = clDraft.splice(i, len);
+    let prev = i - 1;
+    while (prev > 0 && clDraft[prev].depth > 0) prev--;
+    clDraft.splice(prev, 0, ...block);
+  } else {
+    [clDraft[i-1], clDraft[i]] = [clDraft[i], clDraft[i-1]];
+  }
+  clSelectedId = node.id; clRenderEdit();
+}
+
+function clMoveDown(i) {
+  if (i >= clDraft.length - 1) return;
+  const node = clDraft[i];
+  if (node.depth === 0) {
+    const len = clBlockEnd(i) - i;
+    const block = clDraft.splice(i, len);
+    const nextEnd = clBlockEnd(i); // i now points to what was next category
+    clDraft.splice(nextEnd, 0, ...block);
+  } else {
+    [clDraft[i], clDraft[i+1]] = [clDraft[i+1], clDraft[i]];
+  }
+  clSelectedId = node.id; clRenderEdit();
+}
+
+function clIndent(i) {
+  const node = clDraft[i];
+  if (node.depth === 0) return;
+  const prevDepth = i > 0 ? clDraft[i-1].depth : 0;
+  if (node.depth <= prevDepth) { clDraft[i].depth++; clSelectedId = node.id; clRenderEdit(); }
+}
+
+function clUnindent(i) {
+  if (clDraft[i].depth <= 1) return;
+  clDraft[i].depth--; clSelectedId = clDraft[i].id; clRenderEdit();
+}
+
+function clToggleReq(i) {
+  clDraft[i].required = !clDraft[i].required;
+  clSelectedId = clDraft[i].id; clRenderEdit();
+}
 
 async function clSaveEdit() {
-  // Trim and clean
-  for (const cat of clDraft) {
-    cat.label = cat.label.trim() || '未命名分类';
-    cat.items = cat.items.filter(i => i.label.trim());
-    for (const i of cat.items) i.label = i.label.trim();
-  }
-  clConfig = clDraft.filter(c => c.items.length > 0 || c.label !== '新分类');
+  for (const node of clDraft)
+    node.label = (node.label || '').trim() || (node.depth === 0 ? '未命名分类' : '未命名条目');
+  clConfig = clDraft;
   await saveClConfigToDB();
   clCancelEdit();
 }
