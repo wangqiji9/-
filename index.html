@@ -2267,26 +2267,16 @@ async function saveClConfigToDB() {
 }
 
 // ── View Mode ──────────────────────────────────────────────────────────────
-// Unified entry: if lastCalc exists → view mode for recording; else → edit mode
 async function openChecklistSmart() {
   await loadClConfig();
   clChecked = new Set();
+  clEditing = false;
   clSelectedId = null;
+  document.getElementById('cl-view-area').classList.remove('hidden');
+  document.getElementById('cl-edit-area').classList.remove('show');
   const tb = document.getElementById('cl-edit-toggle-btn');
-  if (lastCalc) {
-    clEditing = false;
-    document.getElementById('cl-view-area').classList.remove('hidden');
-    document.getElementById('cl-edit-area').classList.remove('show');
-    tb.textContent = '编辑清单'; tb.classList.remove('active');
-    clRenderView();
-  } else {
-    clEditing = true;
-    clDraft = JSON.parse(JSON.stringify(clConfig));
-    document.getElementById('cl-view-area').classList.add('hidden');
-    document.getElementById('cl-edit-area').classList.add('show');
-    tb.textContent = '← 返回'; tb.classList.add('active');
-    clRenderEdit();
-  }
+  tb.textContent = '编辑清单'; tb.classList.remove('active');
+  clRenderView();
   document.getElementById('checklist-overlay').classList.add('show');
 }
 
